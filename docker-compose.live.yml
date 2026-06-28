@@ -1,0 +1,82 @@
+version: '3.8'
+
+# Live-data deployment for mcp-chassis (SOLVE-IT MCP Server).
+# Data is fetched from SOLVE_IT_DATA_URL at container startup.
+# Falls back to the cached copy in the solve-it-cache volume on failure.
+#
+# Daily refresh: restart the container daily (e.g. via a Kubernetes CronJob
+# or systemd timer) — the entrypoint re-fetches on every startup.
+#
+# Usage:
+#   docker compose -f docker-compose.live.yml up -d
+
+services:
+  mcp-chassis-live:
+    image: 3soos3/solve-it-mcp-v2:live
+    container_name: mcp-chassis-live
+
+    build:
+      context: .
+      dockerfile: Dockerfile.live
+      args:
+        VERSION: live
+
+    environment:
+      MCP_TRANSPORT: http
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8000
+
+      MCP_CHASSIS_CONFIG: /app/config/default.toml
+
+      # Data source — override to point at an internal mirror if needed
+      SOLVE_IT_DATA_URL: https://data.solveit-df.org/solve-it-latest.zip
+      SOLVE_IT_DATA_DIR: /tmp/app-cache/solve-it
+
+      LOG_LEVEL: INFO
+      FORENSIC_METADATA: "false"
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      # Persistent cache so fallback works across restarts
+      - solve-it-cache:/tmp/app-cache/solve-it
+      # Optional: override config without rebuilding
+      - ./config:/app/config:ro
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",
+             "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 60s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    user: "1000:1000"
+
+    networks:
+      - mcp-network
+
+volumes:
+  # Named volume preserves the last-good data across container restarts.
+  # Without this, a failed download on restart would leave the server with no data.
+  solve-it-cache:
+
+networks:
+  mcp-network:
+    driver: bridge
+    name: mcp-chassis-network

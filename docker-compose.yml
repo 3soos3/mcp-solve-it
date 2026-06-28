@@ -11,7 +11,7 @@ services:
     # Build configuration (if building locally instead of pulling from registry)
     build:
       context: .
-      dockerfile: Dockerfile.release
+      dockerfile: Dockerfile
       args:
         SOLVE_IT_VERSION: main
         VERSION: stable
