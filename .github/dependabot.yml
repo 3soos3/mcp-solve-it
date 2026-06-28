@@ -1,0 +1,61 @@
+# Dependabot configuration for automated dependency updates
+# Runs weekly to keep dependencies secure and up-to-date
+
+version: 2
+updates:
+  # Python (pip) dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      python-patches:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+      python-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+
+  # GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      github-actions-safe:
+        patterns:
+          - "actions/*"
+          - "github/*"
+        update-types:
+          - "patch"
+          - "minor"
+      third-party-actions:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "actions/*"
+          - "github/*"
+        update-types:
+          - "patch"

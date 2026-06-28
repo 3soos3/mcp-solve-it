@@ -173,13 +173,25 @@ def on_init(server: ChassisServer) -> None:
         server._kb = kb
         server._kb_error = None
 
+        # Compute and cache KB version CAI for FSS provenance records (L1-03)
+        kb_version = os.environ.get("SOLVE_IT_VERSION", "unknown")
+        server._kb_version = kb_version
+        try:
+            from mcp_chassis.utils.integrity import compute_kb_version_id
+            server._kb_version_id = compute_kb_version_id(str(data_path))
+            logger.info("KB version CAI: %s", server._kb_version_id)
+        except Exception as exc:
+            logger.warning("Failed to compute KB version CAI: %s", exc)
+            server._kb_version_id = None
+
         n_t = len(kb.list_techniques())
         n_w = len(kb.list_weaknesses())
         n_m = len(kb.list_mitigations())
         logger.info(
             "SOLVE-IT KB loaded: %d techniques, %d weaknesses, %d mitigations "
-            "(path: %s, mapping: %s, extensions: %s)",
-            n_t, n_w, n_m, data_path, config.objective_mapping, config.enable_extensions,
+            "(path: %s, mapping: %s, extensions: %s, version: %s)",
+            n_t, n_w, n_m, data_path, config.objective_mapping,
+            config.enable_extensions, kb_version,
         )
     except Exception as exc:
         msg = f"Failed to load SOLVE-IT KB from '{data_path}': {exc}"

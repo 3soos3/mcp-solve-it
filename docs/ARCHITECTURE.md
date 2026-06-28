@@ -42,21 +42,26 @@ The SOLVE-IT MCP Server provides programmatic access to the SOLVE-IT digital for
 ```
 1. config/default.toml loaded by MCP Chassis
 2. solveit_init.py (init hook) runs
-   a. Reads [app] config section
+   a. Reads [app] config section (with MCP_APP_* env var overrides)
    b. Resolves solveit_data_path
    c. Adds SOLVE-IT library directory to sys.path
    d. Instantiates KnowledgeBase
    e. Attaches instance to server._kb
+   f. Computes KB version CAI (sha2-256 hash of all JSON files) → server._kb_version_id
+   g. Stores SOLVE_IT_VERSION env var → server._kb_version
 3. Extension discovery scans extensions/tools/
    → finds solveit_tools.py
 4. solveit_tools.py register(server) runs
    a. Always registers: status tool (1)
    b. If KB loaded successfully:
+      - Orientation tool (1)
       - Batch tools via register_simple_tools (8)
-      - Relationship tools, manual registration (5)
+      - Relationship tools, manual registration (6)
+      - Objective/mapping tools (3)
       - Search tool (1)
       - Full-detail tools if config-gated flag enabled (0 or 3)
       - Extension info tool (1)
+      - Citation tools (3)
 ```
 
 The init hook runs before extension discovery, so `server._kb` is available when `solveit_tools.py` calls `register()`. If the KB fails to load, the status tool still registers and reports the failure; all other tools are skipped.
@@ -66,14 +71,16 @@ The init hook runs before extension discovery, so `server._kb` is available when
 ## 3. Request Flow
 
 ```
-Client → stdio transport → MCP SDK → ChassisServer._dispatch_tool()
-  → Middleware Pipeline (I/O limits → Auth → Rate limit → Sanitize → Validate)
+Client → transport (stdio or HTTP) → MCP SDK → ChassisServer._dispatch_tool()
+  → FSS context vars set (transaction_id, parameters_cai)
+  → Middleware Pipeline (Replay → I/O limits → Auth → Rate limit → Sanitize → Validate)
   → Tool Handler (in solveit_tools.py)
   → KnowledgeBase method call
-  → JSON response → stdout
+  → result_cai computed → _provenance record built → embedded in response
+  → JSON response → transport
 ```
 
-The middleware pipeline is applied before every handler invocation. SOLVE-IT tools do not modify or bypass it. All tool responses are plain Python dicts or strings serialised by the chassis into `CallToolResult`.
+The middleware pipeline is applied before every handler invocation. SOLVE-IT tools do not modify or bypass it. Every successful tool response includes a `_provenance` block with the full FSS-0004 §3.1 provenance record (transaction ID, CAI digests, KB version, timestamps, and optional Ed25519 signature). Error responses include `_provenance` with `evidentiary_status: non-evidentiary`.
 
 ---
 
@@ -83,30 +90,28 @@ Tools are registered in `solveit_tools.py` via two mechanisms.
 
 ### Batch registration (register_simple_tools)
 
-Eight tools are registered through the chassis batch helper. These are straightforward lookups and listings where input schema, handler mapping, and KB method binding follow a uniform pattern:
+Eight tools are registered through the chassis batch helper:
 
-- `solveit_get_technique` — technique lookup by ID
-- `solveit_get_weakness` — weakness lookup by ID
-- `solveit_get_mitigation` — mitigation lookup by ID
-- `solveit_list_techniques` — list all techniques (ID and name)
-- `solveit_list_weaknesses` — list all weaknesses (ID and name)
-- `solveit_list_mitigations` — list all mitigations (ID and name)
-- `solveit_list_objectives` — list all objectives
-- `solveit_get_techniques_for_objective` — techniques for a given objective
+- `solveit_get_technique`, `solveit_get_weakness`, `solveit_get_mitigation` — ID lookups
+- `solveit_list_techniques`, `solveit_list_weaknesses`, `solveit_list_mitigations` — concise listings
+- `solveit_list_objectives`, `solveit_get_techniques_for_objective` — objective tools
 
 ### Manual registration
 
-Eleven tools are registered individually to accommodate non-uniform requirements:
+Sixteen tools are registered individually:
 
 | Group | Count | Reason for manual registration |
 |---|---|---|
-| Relationship tools | 5 | ID format validated before KB call |
-| Search tool | 1 | Input schema varies based on config flags |
-| Full-detail tools | 0 or 3 | Config-gated; only registered when `enable_full_detail_tools = true` |
+| Orientation tool | 1 | Assembles KB stats at call time |
+| Relationship tools | 6 | ID validation before KB call; includes cross-traversal shortcut |
+| Objective/mapping tools | 3 | Reverse lookup + framework switching |
+| Search tool | 1 | Input schema varies based on `[app.search]` config flags |
+| Full-detail tools | 0 or 3 | Config-gated; registered when `enable_full_detail_tools = true` |
 | Status tool | 1 | Always registered, even when KB fails to load |
-| Extension info tool | 1 | Requires access to extension metadata at registration time |
+| Extension info tool | 1 | Registered only when KB loads |
+| Citation tools | 3 | `get`, `list`, and inline `resolve` |
 
-Total tools exposed: 15 (without full-detail) or 18 (with full-detail), plus status = 16 or 19.
+Total tools exposed: 24 always-registered + 3 config-gated full-detail = 27 maximum.
 
 ---
 
@@ -141,25 +146,50 @@ enable_substring_match = true
 enable_search_logic = true
 ```
 
-Key points:
+`[app]` settings can be overridden by `MCP_APP_*` environment variables (e.g. `MCP_APP_SOLVEIT_DATA_PATH`). New FSS-related env vars are also available at the chassis level:
 
-- TOML-only — there are no environment variable overrides for `[app]` settings
+| Variable | Purpose |
+|---|---|
+| `MCP_AUTH_MODE` | Auth mode: `none` (default), `apikey`, `oauth` |
+| `MCP_REPLAY_WINDOW_SECONDS` | Replay prevention window in seconds (default 300, HTTP only) |
+| `MCP_SECURITY_LOG_PATH` | Path for dedicated security event log (default: stderr) |
+| `FSS_SIGNING_KEY_PATH` | PEM file path for Ed25519 provenance signing |
+| `FSS_SIGNING_KEY_B64` | Base64-encoded raw signing key (alternative to PATH) |
+| `SOLVE_IT_VERSION` | KB version label embedded in `_provenance` blocks |
+| `MCP_OTEL_ENABLED` | Set `true` to enable OpenTelemetry traces and metrics |
+| `MCP_OTEL_ENDPOINT` | OTLP exporter endpoint (default `http://localhost:4317`) |
+
 - `solveit_data_path` controls where the init hook looks for the SOLVE-IT library and data files
 - `enable_full_detail_tools` is checked at registration time in `register()`; changing it requires a server restart
 - `[app.search]` flags affect both the search tool's input schema (fields are conditionally included) and runtime behaviour
 
 ---
 
-## 7. Security
+## 7. Security and FSS Compliance
 
-Security is inherited entirely from the MCP Chassis middleware pipeline. The pipeline runs before every tool handler, in this order:
+### Middleware pipeline
 
-1. I/O limit check (request size)
-2. Auth check
-3. Rate limit check
-4. Input sanitization
-5. Input validation against JSON schema
+The pipeline runs before every tool handler:
 
-SOLVE-IT tools do not modify, bypass, or extend the pipeline. No user-uploaded content or external API calls are involved — all data access is read-only against the local KB. The primary risk surface is malformed tool arguments, which the pipeline handles before handlers are reached.
+1. Replay guard (HTTP only — rejects requests outside the timestamp window)
+2. I/O limit check (request size)
+3. Auth check (`none` / `apikey` / `oauth` via `MCP_AUTH_MODE`)
+4. Rate limit check
+5. Input sanitization
+6. Input validation against JSON schema
 
-For chassis-level security details (profiles, rate limit configuration, sanitization rules), see the MCP Chassis documentation.
+### FSS provenance
+
+Every tool response includes a `_provenance` block (FSS-0004 §3.1) with:
+
+- `transaction_id` — UUID v4 per call
+- `parameters_cai` / `artifact_id` — SHA-256 content-addressed identifiers (RFC 8785)
+- `kb_version_id` — CAI of the active KB snapshot computed at startup
+- `timestamp_utc` — ISO 8601 with sub-second precision
+- `result_status` / `evidentiary_status`
+- Investigation context (`investigation_id`, `analyst_identity`, `agent_identity`) when supplied via HTTP headers
+- Optional `signature` — Ed25519 over signed payload fields (requires `FSS_SIGNING_KEY_PATH`)
+
+Error responses carry FSS error codes (`FSS_TOOL_UNAVAILABLE`, `FSS_PARAM_INVALID`, etc.) and `evidentiary_status: non-evidentiary`.
+
+SOLVE-IT tools do not modify or bypass the pipeline. All data access is read-only against the local KB.

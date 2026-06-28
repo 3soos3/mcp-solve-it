@@ -9,6 +9,16 @@ inherited from the underlying chassis.
 > installed the package with `pip install`, use `python3 run.py` (from the
 > project root) as a drop-in replacement — it accepts the same arguments.
 
+> **Error response format:** All error responses are FSS-compliant JSON, not plain
+> text. A blocked or failed tool call returns:
+> ```json
+> {"error_code": "FSS_PARAM_INVALID", "error_message": "...",
+>  "transaction_id": "...", "evidentiary_status": "non-evidentiary",
+>  "_provenance": {...}}
+> ```
+> Common error codes: `FSS_TOOL_UNAVAILABLE`, `FSS_PARAM_INVALID`,
+> `FSS_EXECUTION_INTERRUPTED` (rate limit / replay), `FSS_INTERNAL_ERROR`.
+
 ---
 
 ## SOLVE-IT-Specific Issues

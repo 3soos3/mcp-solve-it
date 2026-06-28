@@ -1,0 +1,80 @@
+version: '3.8'
+
+# Standard deployment for mcp-chassis (SOLVE-IT MCP Server).
+# Mounts config/ and solve-it-main/ data from the host.
+
+services:
+  mcp-chassis:
+    image: 3soos3/mcp-solve-it:latest
+    container_name: mcp-chassis-server
+
+    # Build configuration (if building locally instead of pulling from registry)
+    build:
+      context: .
+      dockerfile: Dockerfile.release
+      args:
+        SOLVE_IT_VERSION: main
+        VERSION: stable
+
+    environment:
+      # Transport configuration
+      MCP_TRANSPORT: http
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8000
+
+      # Config file (overrides baked-in default)
+      MCP_CHASSIS_CONFIG: /app/config/default.toml
+
+      # Logging
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+
+      # OpenTelemetry
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      ENVIRONMENT: production
+
+      # CORS (customise for your deployment)
+      CORS_ORIGINS: "*"
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      # Mount config directory so you can adjust settings without rebuilding
+      - ./config:/app/config:ro
+      # Mount SOLVE-IT data directory (optional — falls back to baked-in copy)
+      # - /path/to/solve-it/data:/app/solve-it-main/data:ro
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",
+             "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    # Run as non-root user (matches Dockerfile.release USER directive)
+    user: "1000:1000"
+
+    networks:
+      - mcp-network
+
+networks:
+  mcp-network:
+    driver: bridge
+    name: mcp-chassis-network

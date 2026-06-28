@@ -2,6 +2,7 @@
 name = "solveit-mcp"
 version = "0.1.0"
 transport = "stdio"
+# Options: stdio, http (requires pip install -e ".[http]")
 log_level = "INFO"
 
 # -- MCP Server Security Configuration -------------------------------

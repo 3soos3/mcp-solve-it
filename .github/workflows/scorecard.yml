@@ -1,0 +1,67 @@
+name: OpenSSF Scorecard - Security Rating
+
+# Evaluates repository security posture using the OpenSSF Scorecard.
+# Runs on push to main and weekly on Monday at 08:00 UTC.
+
+on:
+  push:
+    branches: ["main"]
+  schedule:
+    # Weekly on Monday at 08:00 UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      id-token: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          persist-credentials: false
+
+      - name: Run OpenSSF Scorecard
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Disable publishing for forks (requires non-fork repo)
+          publish_results: false
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
+        with:
+          sarif_file: results.sarif
+
+      - name: Upload results as artifact
+        uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        with:
+          name: scorecard-results
+          path: results.sarif
+          retention-days: 5
+
+      - name: Summary
+        run: |
+          echo "## OpenSSF Scorecard Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View detailed results:" >> $GITHUB_STEP_SUMMARY
+          echo "- [Scorecard Dashboard](https://securityscorecards.dev/viewer/?uri=github.com/${{ github.repository }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [GitHub Security Tab](https://github.com/${{ github.repository }}/security/code-scanning)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The scorecard evaluates:" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch Protection" >> $GITHUB_STEP_SUMMARY
+          echo "- Code Review" >> $GITHUB_STEP_SUMMARY
+          echo "- Signed Releases" >> $GITHUB_STEP_SUMMARY
+          echo "- Dependency Updates" >> $GITHUB_STEP_SUMMARY
+          echo "- SAST (Static Analysis)" >> $GITHUB_STEP_SUMMARY
+          echo "- Vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          echo "- License" >> $GITHUB_STEP_SUMMARY

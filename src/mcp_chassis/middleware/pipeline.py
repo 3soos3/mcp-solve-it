@@ -97,9 +97,14 @@ class MiddlewarePipeline:
         """
         self._config = config
         self._rate_limiter = RateLimiter(config.rate_limits)
+        # Resolve effective auth mode: prefer mode (FSS L2-03), fall back to provider
+        auth_mode = config.auth.mode if config.auth.mode != "none" else (
+            config.auth.provider if config.auth.enabled else "none"
+        )
         self._auth_provider: AuthProvider = create_auth_provider(
-            config.auth.provider if config.auth.enabled else "none",
+            auth_mode,
             token=config.auth.token,
+            auth_config=config.auth,
         )
         self._validation_limits = ValidationLimits(
             max_string_length=config.input_validation.max_string_length,
@@ -158,6 +163,52 @@ class MiddlewarePipeline:
             return MiddlewareResult.error(exc)
         return None
 
+    def _check_replay(self) -> MiddlewareResult | None:
+        """Check X-Request-Timestamp against replay window (FSS-0003 §7.3).
+
+        Only active for HTTP transport (where the header is available).
+        Stdio requests always pass.
+
+        Returns:
+            MiddlewareResult.error if outside window, None if allowed.
+        """
+        import datetime
+
+        from mcp_chassis.utils.fss_context import fss_request_timestamp
+
+        if self._config.replay_window_seconds <= 0:
+            return None
+
+        timestamp_str = fss_request_timestamp.get()
+        if not timestamp_str:
+            return None  # No header present — stdio or client didn't send it
+
+        try:
+            request_time = datetime.datetime.fromisoformat(timestamp_str)
+            if request_time.tzinfo is None:
+                request_time = request_time.replace(tzinfo=datetime.UTC)
+            now = datetime.datetime.now(datetime.UTC)
+            delta = abs((now - request_time).total_seconds())
+            if delta > self._config.replay_window_seconds:
+                from mcp_chassis.errors import RateLimitError
+                raise RateLimitError(
+                    f"Request timestamp outside replay window "
+                    f"({delta:.0f}s > {self._config.replay_window_seconds}s)",
+                    code="REPLAY_REJECTED",
+                )
+        except (RateLimitError, IOLimitError, AuthError, ValidationError,
+                SanitizationError) as exc:
+            from mcp_chassis.logging_config import log_security_event
+            log_security_event(
+                "replay_rejected",
+                error_detail=str(exc.args[0]) if exc.args else str(exc),
+            )
+            return MiddlewareResult.error(exc)
+        except (ValueError, TypeError) as exc:
+            logger.warning("Invalid X-Request-Timestamp '%s': %s", timestamp_str, exc)
+
+        return None
+
     async def process_tool_request(
         self,
         tool_name: str,
@@ -168,7 +219,7 @@ class MiddlewarePipeline:
     ) -> MiddlewareResult:
         """Run all middleware checks on an incoming tool call.
 
-        Order: I/O limits → Auth → Rate limit → Sanitize → Validate.
+        Order: Replay → I/O limits → Auth → Rate limit → Sanitize → Validate.
 
         Args:
             tool_name: Name of the tool being invoked.
@@ -180,6 +231,10 @@ class MiddlewarePipeline:
         Returns:
             MiddlewareResult with sanitized args or error details.
         """
+        # Step 0: Replay prevention (HTTP only, skipped if no timestamp header)
+        if err := self._check_replay():
+            return err
+
         # Step 1: I/O limit check on serialized arguments
         try:
             serialized = json.dumps(arguments)
