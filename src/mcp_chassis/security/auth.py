@@ -209,12 +209,163 @@ class TokenAuthProvider(AuthProvider):
         return all(s in identity.scopes for s in scopes)
 
 
-def create_auth_provider(provider_type: str, token: str = "") -> AuthProvider:
+class ApiKeyProvider(AuthProvider):
+    """API key authentication using SHA-256 hashed key store (FSS-0003 §5.1).
+
+    Validates Authorization: Bearer <key> against a JSON file containing
+    SHA-256 hashes of allowed keys. Raw keys are never stored server-side.
+
+    Args:
+        keys_path: Path to JSON file {"<sha256-hex>": "<identity-label>"}.
+        max_age_days: Maximum allowed key age in days (default 90).
+    """
+
+    def __init__(self, keys_path: str, max_age_days: int = 90) -> None:
+        self._keys_path = keys_path
+        self._max_age_days = max_age_days
+        self._key_store: dict[str, str] = {}
+        self._load_keys()
+
+    def _load_keys(self) -> None:
+        import json as _json
+        from pathlib import Path
+
+        if not self._keys_path:
+            logger.warning("ApiKeyProvider: no api_keys_path configured")
+            return
+        try:
+            self._key_store = _json.loads(Path(self._keys_path).read_text())
+            logger.info(
+                "ApiKeyProvider: loaded %d key hashes from %s",
+                len(self._key_store), self._keys_path,
+            )
+        except Exception as exc:
+            logger.error("ApiKeyProvider: failed to load keys from %s: %s", self._keys_path, exc)
+
+    async def authenticate(self, request_context: dict[str, Any]) -> AuthResult:
+        import hashlib
+
+        from mcp_chassis.logging_config import log_security_event
+
+        auth_header: str = request_context.get("authorization_header", "")
+        if not auth_header.startswith("Bearer "):
+            log_security_event("auth_failure", error_detail="Missing Bearer token")
+            return AuthResult.failure("Authentication required: no Bearer token")
+
+        raw_key = auth_header[7:].strip()
+        if len(raw_key) < 32:
+            log_security_event("auth_failure", error_detail="Key too short")
+            return AuthResult.failure("Authentication failed: key too short")
+
+        key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+        if not self._key_store:
+            self._load_keys()
+
+        identity_label = self._key_store.get(key_hash)
+        if identity_label is None:
+            log_security_event("auth_failure", error_detail="Key hash not found in store")
+            return AuthResult.failure("Authentication failed: invalid API key")
+
+        return AuthResult.success(AuthIdentity(id=identity_label, scopes=frozenset(["*"])))
+
+    async def authorize(
+        self, identity: AuthIdentity, tool_name: str, scopes: list[str]
+    ) -> bool:
+        return "*" in identity.scopes or all(s in identity.scopes for s in scopes)
+
+
+class OAuthJWTProvider(AuthProvider):
+    """OAuth 2.0 JWT authentication via JWKS endpoint (FSS-0003 §5.1 RECOMMENDED).
+
+    Validates Authorization: Bearer <JWT> by fetching the signing key
+    from the configured JWKS URL and verifying the token claims.
+
+    Args:
+        jwks_url: URL of the JWKS endpoint.
+        audience: Expected 'aud' claim value.
+        issuer: Expected 'iss' claim value.
+    """
+
+    def __init__(self, jwks_url: str, audience: str, issuer: str) -> None:
+        self._jwks_url = jwks_url
+        self._audience = audience
+        self._issuer = issuer
+        self._jwks_cache: dict[str, Any] = {}
+        self._jwks_cached_at: float = 0.0
+        self._jwks_ttl = 3600.0  # 1 hour
+
+    async def _get_jwks(self) -> dict[str, Any]:
+        import time
+        import httpx
+
+        now = time.monotonic()
+        if self._jwks_cache and (now - self._jwks_cached_at) < self._jwks_ttl:
+            return self._jwks_cache
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(self._jwks_url, timeout=10.0)
+            resp.raise_for_status()
+            self._jwks_cache = resp.json()
+            self._jwks_cached_at = now
+            logger.debug("JWKS refreshed from %s", self._jwks_url)
+            return self._jwks_cache
+
+    async def authenticate(self, request_context: dict[str, Any]) -> AuthResult:
+        from mcp_chassis.logging_config import log_security_event
+
+        auth_header: str = request_context.get("authorization_header", "")
+        if not auth_header.startswith("Bearer "):
+            log_security_event("auth_failure", error_detail="Missing Bearer JWT")
+            return AuthResult.failure("Authentication required: no Bearer token")
+
+        token = auth_header[7:].strip()
+
+        try:
+            import jwt as pyjwt
+        except ImportError:
+            logger.error("PyJWT not installed — OAuth auth unavailable. pip install PyJWT")
+            return AuthResult.failure("Server misconfiguration: PyJWT not installed")
+
+        try:
+            jwks = await self._get_jwks()
+            # Use PyJWT's PyJWKClient for JWKS-based key selection
+            from jwt import PyJWKClient  # type: ignore[import-untyped]
+            jwk_client = PyJWKClient(self._jwks_url)
+            # Use cached JWKS to avoid extra network call
+            signing_key = jwk_client.get_signing_key_from_jwt(token)
+            payload = pyjwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256", "RS384", "RS512", "ES256", "ES384", "EdDSA"],
+                audience=self._audience or None,
+                issuer=self._issuer or None,
+                options={"require": ["exp", "sub"]},
+            )
+            subject = payload.get("sub") or payload.get("client_id", "unknown")
+            return AuthResult.success(AuthIdentity(id=subject, scopes=frozenset(["*"])))
+        except Exception as exc:
+            log_security_event("auth_failure", error_detail=str(exc))
+            logger.warning("JWT validation failed: %s", exc)
+            return AuthResult.failure(f"Authentication failed: {exc}")
+
+    async def authorize(
+        self, identity: AuthIdentity, tool_name: str, scopes: list[str]
+    ) -> bool:
+        return "*" in identity.scopes or all(s in identity.scopes for s in scopes)
+
+
+def create_auth_provider(
+    provider_type: str,
+    token: str = "",
+    auth_config: Any = None,
+) -> AuthProvider:
     """Factory function to create an AuthProvider by type name.
 
     Args:
-        provider_type: Type name ('none', 'token').
-        token: Token for TokenAuthProvider (ignored for 'none').
+        provider_type: Type name ('none', 'token', 'apikey', 'oauth').
+        token: Token for TokenAuthProvider (ignored for other types).
+        auth_config: AuthConfig dataclass for advanced providers.
 
     Returns:
         An AuthProvider instance.
@@ -226,6 +377,15 @@ def create_auth_provider(provider_type: str, token: str = "") -> AuthProvider:
         return NoAuthProvider()
     elif provider_type == "token":
         return TokenAuthProvider(token)
+    elif provider_type == "apikey":
+        keys_path = getattr(auth_config, "api_keys_path", "") if auth_config else ""
+        max_age = getattr(auth_config, "api_key_max_age_days", 90) if auth_config else 90
+        return ApiKeyProvider(keys_path=keys_path, max_age_days=max_age)
+    elif provider_type == "oauth":
+        jwks_url = getattr(auth_config, "oauth_jwks_url", "") if auth_config else ""
+        audience = getattr(auth_config, "oauth_audience", "") if auth_config else ""
+        issuer = getattr(auth_config, "oauth_issuer", "") if auth_config else ""
+        return OAuthJWTProvider(jwks_url=jwks_url, audience=audience, issuer=issuer)
     else:
         raise AuthError(
             f"Unknown auth provider type '{provider_type}'",

@@ -10,16 +10,16 @@
 
 ### 1. Install dependencies
 
-**Option 1:**
-
-```bash
-pip install "mcp>=1.6.0,<2.0" pydantic pybtex
-```
-
-**Option 2:**
- From within the root directory of this folder.
 ```bash
 pip install -e ".[dev]"
+```
+
+The required dependencies (`mcp`, `jcs`) are declared in `pyproject.toml`. HTTP transport and optional features (auth, OTel) can be installed via extras:
+
+```bash
+pip install -e ".[http]"    # HTTP/SSE transport
+pip install -e ".[auth]"    # OAuth 2.0 / API key auth
+pip install -e ".[otel]"    # OpenTelemetry
 ```
 
 ### 2. Download this repo.
@@ -75,13 +75,21 @@ Configure your MCP client to connect to the MCP server. In some cases (e.g. Clau
 
 ## Available MCP Tools
 
+24 tools are always registered when the KB loads successfully, plus 3 config-gated full-detail tools and 1 status tool that is always available.
+
+### Orientation (1 tool)
+
+| Tool | Description |
+|---|---|
+| `solveit_get_database_description` | Call this first — returns the DB structure, entity types, available mappings, and item counts |
+
 ### Lookup (3 tools)
 
 | Tool | Description |
 |---|---|
-| `solveit_get_technique` | Retrieve full details for a single technique by ID |
-| `solveit_get_weakness` | Retrieve full details for a single weakness by ID |
-| `solveit_get_mitigation` | Retrieve full details for a single mitigation by ID |
+| `solveit_get_technique` | Retrieve full details for a technique by DFT-XXXX ID |
+| `solveit_get_weakness` | Retrieve full details for a weakness by DFW-XXXX ID |
+| `solveit_get_mitigation` | Retrieve full details for a mitigation by DFM-XXXX ID |
 
 ### Summary Listing (3 tools)
 
@@ -91,22 +99,26 @@ Configure your MCP client to connect to the MCP server. In some cases (e.g. Clau
 | `solveit_list_weaknesses` | List all weaknesses with ID and name |
 | `solveit_list_mitigations` | List all mitigations with ID and name |
 
-### Objectives (2 tools)
+### Objectives and Mappings (5 tools)
 
 | Tool | Description |
 |---|---|
 | `solveit_list_objectives` | List all forensic objectives defined in the active mapping |
-| `solveit_get_techniques_for_objective` | List techniques categorized under a given objective |
+| `solveit_get_techniques_for_objective` | List techniques under a given objective |
+| `solveit_get_objectives_for_technique` | Find which objectives a technique belongs to (reverse lookup) |
+| `solveit_list_available_mappings` | List available framework mapping files (solve-it, carrier, dfrws) |
+| `solveit_load_objective_mapping` | Switch to a different investigation framework |
 
-### Relationships (5 tools)
+### Relationships (6 tools)
 
 | Tool | Description |
 |---|---|
 | `solveit_get_weaknesses_for_technique` | List weaknesses that affect a given technique |
 | `solveit_get_mitigations_for_weakness` | List mitigations that address a given weakness |
-| `solveit_get_techniques_for_weakness` | List techniques affected by a given weakness |
-| `solveit_get_weaknesses_for_mitigation` | List weaknesses addressed by a given mitigation |
-| `solveit_get_techniques_for_mitigation` | List techniques related to a given mitigation |
+| `solveit_get_mitigations_for_technique` | List mitigations for a technique in one call (shortcut) |
+| `solveit_get_techniques_for_weakness` | List techniques affected by a given weakness (reverse) |
+| `solveit_get_weaknesses_for_mitigation` | List weaknesses addressed by a given mitigation (reverse) |
+| `solveit_get_techniques_for_mitigation` | List techniques linked to a given mitigation (reverse) |
 
 ### Search (1 tool)
 
@@ -114,28 +126,29 @@ Configure your MCP client to connect to the MCP server. In some cases (e.g. Clau
 |---|---|
 | `solveit_search` | Full-text search across techniques, weaknesses, and mitigations |
 
+### Citations (3 tools)
+
+| Tool | Description |
+|---|---|
+| `solveit_get_citation` | Resolve a DFCite-XXXX ID to its full bibliographic text |
+| `solveit_list_citations` | List all citation IDs in the knowledge base |
+| `solveit_resolve_inline_citations` | Replace [DFCite-XXXX] markers in text with Harvard-style citations |
+
 ### Extension Info (1 tool)
 
 | Tool | Description |
 |---|---|
 | `solveit_list_loaded_extensions` | List any SOLVE-IT-X extension datasets currently loaded |
 
-### Citations (2 tools)
+### Status (1 tool — always available)
 
 | Tool | Description |
 |---|---|
-| `solveit_get_citation` | Retrieve a citation by its DFCite ID |
-| `solveit_list_citations` | List all citation IDs in the knowledge base |
+| `solveit_status` | Report data load status, item counts, and active configuration |
 
-### Status (1 tool)
+### Full-Detail Listings (disabled by default)
 
-| Tool | Description |
-|---|---|
-| `solveit_status` | Report data load status, item counts (including citations), and active configuration |
-
-### Full-Detail Listings
-
-**Note:** These tools are disabled by default due to the large volume of data they return. They can be enabled in **config/default.toml**. 
+**Note:** These tools return the complete dataset for an entire item type and may consume ~25,000–32,000 LLM context tokens. Enable in **config/default.toml**.
 
 | Tool | Description |
 |---|---|
@@ -248,18 +261,31 @@ src/mcp_chassis/
   config.py                        — Configuration dataclasses and TOML loading
   __main__.py                      — CLI entry point
   extensions/
-    solveit_init.py                — Initializes the SOLVE-IT data loader on startup
+    solveit_init.py                — Init hook: loads KB, computes KB version CAI
     tools/
-      solveit_tools.py             — All 21 SOLVE-IT tool registrations and handlers
+      solveit_tools.py             — All 24 SOLVE-IT tool registrations and handlers
   middleware/
-    pipeline.py                    — Security middleware pipeline
-  security/                        — Rate limiting, sanitization, validation, profiles
-  transport/                       — Stdio transport (production)
+    pipeline.py                    — Security middleware pipeline (+ replay prevention)
+  security/                        — Auth (none/apikey/oauth), rate limiting, sanitization
+  transport/
+    stdio.py                       — Stdio transport (default)
+    http.py                        — HTTP/SSE transport (optional, requires [http] extra)
+  utils/
+    fss_context.py                 — FSS per-request context variables
+    integrity.py                   — CAI computation, Ed25519 signing (FSS-0005)
+    provenance.py                  — _provenance record builder (FSS-0004)
+    telemetry.py                   — Optional OpenTelemetry integration
+    metrics.py                     — Per-dispatch OTel metrics
 config/
   default.toml                     — Server and application configuration
+scripts/
+  generate_signing_key.py          — Generate Ed25519 keypair for FSS signing
+  verify_provenance.py             — Verify _provenance records (FSS-0005 §8)
+  validate_dataset.py              — Check KB structural integrity (FSS-0006 §4.4)
 tests/
   unit/                            — Unit tests
-  integration/                     — Integration tests (stdio subprocess)
+  integration/                     — Integration tests
+  stress/                          — Locust load tests
 docs/
   ARCHITECTURE.md                  — Component design and data flow
   TROUBLESHOOTING.md               — Common issues and fixes

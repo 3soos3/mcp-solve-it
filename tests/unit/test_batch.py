@@ -116,7 +116,9 @@ class TestRegisterSimpleTools:
         ])
 
         result = await server._dispatch_tool("test_list_items", {})
-        data = json.loads(result.content[0].text)
+        raw = json.loads(result.content[0].text)
+        # Provenance wraps non-dict results under "result" key
+        data = raw.get("result", raw)
         assert isinstance(data, list)
         assert len(data) == 2
 
@@ -139,7 +141,8 @@ class TestRegisterSimpleTools:
         ])
 
         result = await server._dispatch_tool("test_get_related", {"item_id": "FOUND-1"})
-        data = json.loads(result.content[0].text)
+        raw = json.loads(result.content[0].text)
+        data = raw.get("result", raw)
         assert isinstance(data, list)
         assert len(data) == 1
 

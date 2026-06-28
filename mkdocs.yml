@@ -1,0 +1,93 @@
+site_name: SOLVE-IT MCP Server (Chassis)
+site_description: MCP server for the SOLVE-IT digital forensics knowledge base, built on the MCP Chassis framework
+site_author: 3soos3
+site_url: https://3soos3.github.io/mcp-solve-it/
+
+repo_name: 3soos3/mcp-solve-it
+repo_url: https://github.com/3soos3/mcp-solve-it
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search:
+      lang: en
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - admonition
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Guides:
+    - For Forensic Analysts: guides/for-forensic-analysts.md
+    - For Researchers: guides/for-researchers.md
+    - Integration: guides/integration.md
+    - Troubleshooting: guides/troubleshooting.md
+  - Reference:
+    - Tools Overview: reference/tools-overview.md
+    - Environment Variables: reference/environment-variables.md
+  - Architecture:
+    - Overview: architecture/overview.md
+  - Deployment:
+    - Docker: deployment/docker.md
+    - Kubernetes: deployment/kubernetes.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/3soos3/mcp-solve-it
+
+copyright: Copyright &copy; 2026 3soos3 | Licensed under MIT License

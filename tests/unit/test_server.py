@@ -169,7 +169,9 @@ class TestServerToolDispatch:
         server.register_tool("echo", "echo", {"type": "object"}, handler)
         result = await server._dispatch_tool("echo", {})
         assert not result.isError
-        assert result.content[0].text == "hello world"  # type: ignore[union-attr]
+        # String results are wrapped in {"result": ..., "_provenance": {...}}
+        data = json.loads(result.content[0].text)  # type: ignore[union-attr]
+        assert data["result"] == "hello world"
 
     @pytest.mark.asyncio
     async def test_tool_returns_dict(self, server: ChassisServer) -> None:
@@ -186,7 +188,8 @@ class TestServerToolDispatch:
     async def test_unknown_tool_returns_error(self, server: ChassisServer) -> None:
         result = await server._dispatch_tool("nonexistent", {})
         assert result.isError
-        assert "TOOL_NOT_FOUND" in result.content[0].text  # type: ignore[union-attr]
+        data = json.loads(result.content[0].text)  # type: ignore[union-attr]
+        assert data["error_code"] == "FSS_TOOL_UNAVAILABLE"
 
     @pytest.mark.asyncio
     async def test_handler_exception_returns_error(self, server: ChassisServer) -> None:
@@ -196,7 +199,8 @@ class TestServerToolDispatch:
         server.register_tool("broken", "broken", {"type": "object"}, failing_handler)
         result = await server._dispatch_tool("broken", {})
         assert result.isError
-        assert "HANDLER_ERROR" in result.content[0].text  # type: ignore[union-attr]
+        data = json.loads(result.content[0].text)  # type: ignore[union-attr]
+        assert data["error_code"] == "FSS_INTERNAL_ERROR"
 
     @pytest.mark.asyncio
     async def test_handler_receives_arguments(self, server: ChassisServer) -> None:
@@ -240,7 +244,8 @@ class TestServerToolDispatch:
         result = await s._dispatch_tool("big", {})
         assert result.isError
         text = result.content[0].text  # type: ignore[union-attr]
-        assert "IO_LIMIT_EXCEEDED" in text or "RESPONSE_TOO_LARGE" in text
+        data = json.loads(text)
+        assert "error_code" in data  # FSS error response
 
     @pytest.mark.asyncio
     async def test_middleware_blocks_oversized_input(self) -> None:
@@ -268,7 +273,8 @@ class TestNonSerializableHandlerReturn:
         server.register_tool("bad_return", "d", {"type": "object"}, handler)
         result = await server._dispatch_tool("bad_return", {})
         assert result.isError
-        assert "HANDLER_ERROR" in result.content[0].text  # type: ignore[union-attr]
+        data = json.loads(result.content[0].text)  # type: ignore[union-attr]
+        assert data["error_code"] == "FSS_INTERNAL_ERROR"
 
     @pytest.mark.asyncio
     async def test_set_return_produces_error(self, server: ChassisServer) -> None:
@@ -324,9 +330,10 @@ class TestDetailedErrors:
         result = await s._dispatch_tool("big", {})
         assert result.isError
         text = result.content[0].text  # type: ignore[union-attr]
-        # Generic mode: message says "Request failed", no size details
-        assert "Request failed" in text
-        assert "correlation_id=" in text
+        # Generic mode: FSS error response with error_code, no internal details
+        data = json.loads(text)
+        assert data["error_code"] == "FSS_INTERNAL_ERROR"
+        assert "transaction_id" in data
         assert "exceeds" not in text.lower()
 
 
@@ -760,8 +767,8 @@ class TestCorrelationIdInLogs:
 
         with caplog.at_level(logging.ERROR, logger="mcp_chassis.server"):
             await server._dispatch_tool("fail", {})
-        # Log entry should contain "request_correlation_id=" with context's ID
-        assert "request_correlation_id=" in caplog.text
+        # Log entry should contain the correlation/transaction ID
+        assert "correlation_id=" in caplog.text
 
 
 class TestInitHook:

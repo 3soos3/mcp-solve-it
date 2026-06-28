@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# ── Status tool (always registered, even on degraded startup) ──────────
+
 def _register_status_tool(server: ChassisServer) -> None:
     """Register solveit_status — always available, even if KB failed."""
     kb = getattr(server, "_kb", None)
@@ -51,72 +53,243 @@ def _register_status_tool(server: ChassisServer) -> None:
         description=(
             "SOLVE-IT knowledge base status. Returns item counts (techniques, "
             "weaknesses, mitigations, citations) and loaded extensions when "
-            "healthy, or error details if the KB failed to load."
+            "healthy, or error details if the KB failed to load. "
+            "Call this if tools are returning errors to diagnose the issue."
         ),
         input_schema={"type": "object", "properties": {}},
         handler=_handle,
     )
 
 
+# ── Database description tool ──────────────────────────────────────────
+
+def _register_database_description_tool(server: ChassisServer, kb: Any) -> None:
+    """Register solveit_get_database_description — orientation tool."""
+
+    async def _handle(
+        arguments: dict[str, Any], context: HandlerContext
+    ) -> str:
+        await context.log_debug("solveit_get_database_description called")
+        try:
+            mappings: list[str] = []
+            try:
+                mappings = kb.list_available_mappings()
+            except Exception:
+                pass
+
+            description = {
+                "database_name": "SOLVE-IT Digital Forensics Knowledge Base",
+                "description": (
+                    "A systematic digital forensics knowledge base inspired by MITRE ATT&CK"
+                ),
+                "purpose": (
+                    "Provides comprehensive mapping of digital forensic investigation "
+                    "techniques, weaknesses, and mitigations"
+                ),
+                "entity_types": {
+                    "techniques": (
+                        "Digital forensic investigation methods "
+                        "(DFT-1001, DFT-1002, …)"
+                    ),
+                    "weaknesses": (
+                        "Potential problems or limitations of techniques "
+                        "(DFW-1001, DFW-1002, …)"
+                    ),
+                    "mitigations": (
+                        "Ways to address weaknesses "
+                        "(DFM-1001, DFM-1002, …)"
+                    ),
+                    "objectives": (
+                        "Investigation workflow phases that group techniques "
+                        "(e.g. 'Acquire data', 'Preserve digital evidence')"
+                    ),
+                    "citations": (
+                        "Academic and industry references cited by techniques "
+                        "and weaknesses (DFCite-XXXX)"
+                    ),
+                },
+                "statistics": {
+                    "techniques": len(kb.list_techniques()),
+                    "weaknesses": len(kb.list_weaknesses()),
+                    "mitigations": len(kb.list_mitigations()),
+                    "citations": len(kb.citations),
+                },
+                "available_mappings": mappings,
+                "available_operations": [
+                    "Search across techniques, weaknesses, and mitigations by "
+                    "keyword (solveit_search)",
+                    "Retrieve detailed information by ID "
+                    "(solveit_get_technique, solveit_get_weakness, "
+                    "solveit_get_mitigation)",
+                    "Explore relationships between components "
+                    "(solveit_get_weaknesses_for_technique, "
+                    "solveit_get_mitigations_for_weakness, …)",
+                    "Resolve citations (DFCite-XXXX) to full bibliographic "
+                    "text (solveit_get_citation, "
+                    "solveit_resolve_inline_citations)",
+                    "Work with different objective mappings "
+                    "(solveit_list_available_mappings, "
+                    "solveit_load_objective_mapping)",
+                    "Bulk retrieval operations "
+                    "(solveit_list_techniques, solveit_list_weaknesses, "
+                    "solveit_list_mitigations)",
+                ],
+            }
+            return json.dumps(description, indent=2)
+        except Exception as exc:
+            return json.dumps({"error": f"Failed to retrieve database description: {exc}"})
+
+    server.register_tool(
+        name="solveit_get_database_description",
+        description=(
+            "Call this first to understand the SOLVE-IT knowledge base before "
+            "using other tools. Returns the database structure, entity types "
+            "(techniques DFT-XXXX, weaknesses DFW-XXXX, mitigations DFM-XXXX, "
+            "citations DFCite-XXXX), available objective mappings, and item "
+            "counts. Use this to orient yourself before searching or retrieving "
+            "specific items."
+        ),
+        input_schema={"type": "object", "properties": {}},
+        handler=_handle,
+    )
+
+
+# ── Batch tools (get-by-ID and list-all) ──────────────────────────────
+
 _BATCH_TOOLS: list[dict[str, Any]] = [
     {
         "name": "solveit_get_technique",
-        "description": "Get full details of a SOLVE-IT technique by its ID (e.g. DFT-1001).",
+        "description": (
+            "Get full details for a technique by its DFT-XXXX ID. "
+            "The response includes name, description, subtechniques, and a "
+            "'weaknesses' list of DFW-XXXX IDs. References appear as "
+            "DFCite-XXXX IDs — call solveit_get_citation to resolve them to "
+            "full bibliographic text. Use solveit_get_weaknesses_for_technique "
+            "to get weakness details in one step instead of resolving each "
+            "DFW-XXXX manually."
+        ),
         "method": "get_technique",
         "param": "technique_id",
         "param_description": "The technique ID (e.g. DFT-1001).",
+        "param_schema": {"type": "string", "minLength": 1},
         "not_found_check": True,
+        "tool_version": "1.0.0",
+        "idempotent": True,
+        "side_effects": False,
+        "deterministic": True,
+        "known_limitations": (
+            "Coverage is limited to techniques documented in the active SOLVE-IT "
+            "KB version. Emerging techniques not yet included will not be found. "
+            "Sub-technique content depends on whether the parent technique has "
+            "been fully populated in the KB."
+        ),
     },
     {
         "name": "solveit_get_weakness",
-        "description": "Get full details of a SOLVE-IT weakness by its ID (e.g. DFW-1001).",
+        "description": (
+            "Get full details for a weakness by its DFW-XXXX ID. "
+            "The 'name' field is the primary description of what can go wrong. "
+            "The response includes ASTM error categories and a 'mitigations' "
+            "list of DFM-XXXX IDs. Use solveit_get_mitigations_for_weakness "
+            "to resolve those IDs to full mitigation details in one step."
+        ),
         "method": "get_weakness",
         "param": "weakness_id",
         "param_description": "The weakness ID (e.g. DFW-1001).",
+        "param_schema": {"type": "string", "minLength": 1},
         "not_found_check": True,
     },
     {
         "name": "solveit_get_mitigation",
-        "description": "Get full details of a SOLVE-IT mitigation by its ID (e.g. DFM-1001).",
+        "description": (
+            "Get full details for a mitigation by its DFM-XXXX ID. "
+            "The 'name' field is the primary description of the recommended "
+            "action. Use solveit_get_weaknesses_for_mitigation or "
+            "solveit_get_techniques_for_mitigation to understand which "
+            "weaknesses and techniques this mitigation addresses."
+        ),
         "method": "get_mitigation",
         "param": "mitigation_id",
         "param_description": "The mitigation ID (e.g. DFM-1001).",
+        "param_schema": {"type": "string", "minLength": 1},
         "not_found_check": True,
     },
     {
         "name": "solveit_list_techniques",
-        "description": "List all SOLVE-IT techniques (ID and name only).",
+        "description": (
+            "Get all techniques as a concise ID+name list (~180 entries). "
+            "Use this to browse the full catalogue or find IDs before calling "
+            "solveit_get_technique. Prefer solveit_search when you have "
+            "keywords — this returns everything."
+        ),
         "method": "get_all_techniques_with_name_and_id",
     },
     {
         "name": "solveit_list_weaknesses",
-        "description": "List all SOLVE-IT weaknesses (ID and name only).",
+        "description": (
+            "Get all weaknesses as a concise ID+name list. "
+            "Use this to browse all known weaknesses or find IDs before calling "
+            "solveit_get_weakness. Prefer solveit_search when you have "
+            "keywords — this returns everything."
+        ),
         "method": "get_all_weaknesses_with_name_and_id",
     },
     {
         "name": "solveit_list_mitigations",
-        "description": "List all SOLVE-IT mitigations (ID and name only).",
+        "description": (
+            "Get all mitigations as a concise ID+name list. "
+            "Use this to browse all available mitigations or find IDs before "
+            "calling solveit_get_mitigation. Prefer solveit_search when you "
+            "have keywords — this returns everything."
+        ),
         "method": "get_all_mitigations_with_name_and_id",
     },
     {
         "name": "solveit_list_objectives",
-        "description": "List all objectives in the current SOLVE-IT mapping.",
+        "description": (
+            "List all investigation objectives (workflow phases) from the "
+            "currently loaded mapping. Objectives group techniques by "
+            "investigation goal — e.g. 'Acquire data', "
+            "'Preserve digital evidence'. "
+            "Use solveit_get_techniques_for_objective to get the techniques "
+            "under a specific objective. Use solveit_load_objective_mapping "
+            "to switch between frameworks (solve-it, carrier, dfrws)."
+        ),
         "method": "list_objectives",
     },
     {
         "name": "solveit_get_techniques_for_objective",
-        "description": "Get all techniques associated with a given objective name.",
+        "description": (
+            "Get all techniques belonging to a specific investigation "
+            "objective (workflow phase). "
+            "Use solveit_list_objectives first to get the exact objective "
+            "names. "
+            "Use this to answer 'what techniques are available for this phase "
+            "of the investigation?' "
+            "Forward direction: complements "
+            "solveit_get_objectives_for_technique (reverse direction)."
+        ),
         "method": "get_techniques_for_objective",
         "param": "objective_name",
         "param_description": "The objective name (e.g. 'Acquire data').",
+        "param_schema": {"type": "string", "minLength": 1},
     },
 ]
 
 
+# ── Relationship tools ─────────────────────────────────────────────────
+
 _RELATIONSHIP_TOOLS: list[dict[str, Any]] = [
     {
         "tool_name": "solveit_get_weaknesses_for_technique",
-        "description": "Get all weaknesses associated with a given technique.",
+        "description": (
+            "Get all weaknesses for a technique (DFT-XXXX) with full details "
+            "in one call. More efficient than calling solveit_get_weakness for "
+            "each DFW-XXXX ID from solveit_get_technique. "
+            "Use this to answer 'what can go wrong with this technique?' "
+            "Forward direction: complements "
+            "solveit_get_techniques_for_weakness (reverse direction)."
+        ),
         "lookup_method": "get_technique",
         "relation_method": "get_weaknesses_for_technique",
         "param_name": "technique_id",
@@ -124,7 +297,14 @@ _RELATIONSHIP_TOOLS: list[dict[str, Any]] = [
     },
     {
         "tool_name": "solveit_get_mitigations_for_weakness",
-        "description": "Get all mitigations that address a given weakness.",
+        "description": (
+            "Get all mitigations for a weakness (DFW-XXXX) with full details "
+            "in one call. More efficient than resolving each DFM-XXXX ID from "
+            "solveit_get_weakness individually. "
+            "Use this to answer 'how can this weakness be addressed?' "
+            "Forward direction: complements "
+            "solveit_get_weaknesses_for_mitigation (reverse direction)."
+        ),
         "lookup_method": "get_weakness",
         "relation_method": "get_mitigations_for_weakness",
         "param_name": "weakness_id",
@@ -132,7 +312,14 @@ _RELATIONSHIP_TOOLS: list[dict[str, Any]] = [
     },
     {
         "tool_name": "solveit_get_techniques_for_weakness",
-        "description": "Get all techniques that can exhibit a given weakness.",
+        "description": (
+            "Find all techniques that can exhibit a specific weakness "
+            "(DFW-XXXX). "
+            "Use this for reverse lookup — e.g. 'which techniques are affected "
+            "by this limitation?' "
+            "Reverse direction: complements "
+            "solveit_get_weaknesses_for_technique (forward direction)."
+        ),
         "lookup_method": "get_weakness",
         "relation_method": "get_techniques_for_weakness",
         "param_name": "weakness_id",
@@ -140,7 +327,13 @@ _RELATIONSHIP_TOOLS: list[dict[str, Any]] = [
     },
     {
         "tool_name": "solveit_get_weaknesses_for_mitigation",
-        "description": "Get all weaknesses that a given mitigation addresses.",
+        "description": (
+            "Find all weaknesses that a mitigation (DFM-XXXX) addresses. "
+            "Use this for reverse lookup — e.g. 'which weaknesses does this "
+            "control fix?' "
+            "Reverse direction: complements "
+            "solveit_get_mitigations_for_weakness (forward direction)."
+        ),
         "lookup_method": "get_mitigation",
         "relation_method": "get_weaknesses_for_mitigation",
         "param_name": "mitigation_id",
@@ -148,7 +341,14 @@ _RELATIONSHIP_TOOLS: list[dict[str, Any]] = [
     },
     {
         "tool_name": "solveit_get_techniques_for_mitigation",
-        "description": "Get all techniques reachable from a given mitigation.",
+        "description": (
+            "Find all techniques indirectly linked to a mitigation (DFM-XXXX) "
+            "via their shared weaknesses. "
+            "Use this to understand the scope of impact of a control — "
+            "e.g. 'which techniques benefit from applying this mitigation?' "
+            "Reverse direction: complements "
+            "solveit_get_mitigations_for_technique (forward direction)."
+        ),
         "lookup_method": "get_mitigation",
         "relation_method": "get_techniques_for_mitigation",
         "param_name": "mitigation_id",
@@ -158,12 +358,7 @@ _RELATIONSHIP_TOOLS: list[dict[str, Any]] = [
 
 
 def _register_relationship_tools(server: ChassisServer, kb: Any) -> None:
-    """Register relationship tools with ID validation.
-
-    Args:
-        server: The ChassisServer to register tools on.
-        kb: The KnowledgeBase instance providing lookup and relation methods.
-    """
+    """Register relationship tools with ID validation."""
     for defn in _RELATIONSHIP_TOOLS:
         tool_name = defn["tool_name"]
         description = defn["description"]
@@ -195,6 +390,7 @@ def _register_relationship_tools(server: ChassisServer, kb: Any) -> None:
                     param_name: {
                         "type": "string",
                         "description": param_description,
+                        "minLength": 1,
                     },
                 },
                 "required": [param_name],
@@ -203,16 +399,185 @@ def _register_relationship_tools(server: ChassisServer, kb: Any) -> None:
         )
 
 
+# ── Cross-traversal shortcut ───────────────────────────────────────────
+
+def _register_mitigations_for_technique_tool(
+    server: ChassisServer, kb: Any
+) -> None:
+    """Register solveit_get_mitigations_for_technique."""
+
+    async def _handle(
+        arguments: dict[str, Any], context: HandlerContext
+    ) -> str:
+        await context.log_debug("solveit_get_mitigations_for_technique called")
+        technique_id = arguments["technique_id"]
+        try:
+            if kb.get_technique(technique_id) is None:
+                return json.dumps({"error": "not_found", "id": technique_id})
+            mitigation_ids = kb.get_mit_list_for_technique(technique_id)
+            return json.dumps(
+                {"technique_id": technique_id, "mitigations": mitigation_ids}
+            )
+        except Exception as exc:
+            return json.dumps(
+                {"error": f"Failed to retrieve mitigations for technique: {exc}"}
+            )
+
+    server.register_tool(
+        name="solveit_get_mitigations_for_technique",
+        description=(
+            "Get all mitigations for a technique in one call, skipping the "
+            "weakness intermediary. "
+            "Shortcut for the technique → weaknesses → mitigations traversal. "
+            "Use this when you want to know how to address limitations of a "
+            "technique without needing to inspect individual weaknesses first."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "technique_id": {
+                    "type": "string",
+                    "description": "The technique ID (e.g. DFT-1001).",
+                    "minLength": 1,
+                },
+            },
+            "required": ["technique_id"],
+        },
+        handler=_handle,
+    )
+
+
+# ── Objective / mapping tools ──────────────────────────────────────────
+
+def _register_objectives_and_mapping_tools(
+    server: ChassisServer, kb: Any
+) -> None:
+    """Register reverse-objective lookup and mapping switch tools."""
+
+    # solveit_get_objectives_for_technique
+    async def _handle_obj_for_tech(
+        arguments: dict[str, Any], context: HandlerContext
+    ) -> str:
+        await context.log_debug("solveit_get_objectives_for_technique called")
+        technique_id = arguments["technique_id"]
+        try:
+            objectives = kb.get_objectives_for_technique(technique_id)
+            return json.dumps(objectives)
+        except Exception as exc:
+            return json.dumps(
+                {"error": f"Failed to retrieve objectives for technique: {exc}"}
+            )
+
+    server.register_tool(
+        name="solveit_get_objectives_for_technique",
+        description=(
+            "Find which investigation objectives (workflow phases) a technique "
+            "belongs to. "
+            "Use this for reverse lookup — e.g. 'at what stage of an "
+            "investigation is this technique used?' "
+            "Also handles subtechniques by returning the parent technique's "
+            "objectives. "
+            "Reverse direction: complements "
+            "solveit_get_techniques_for_objective (forward direction)."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "technique_id": {
+                    "type": "string",
+                    "description": "The technique ID (e.g. DFT-1001).",
+                    "minLength": 1,
+                },
+            },
+            "required": ["technique_id"],
+        },
+        handler=_handle_obj_for_tech,
+    )
+
+    # solveit_list_available_mappings
+    async def _handle_list_mappings(
+        arguments: dict[str, Any], context: HandlerContext
+    ) -> str:
+        await context.log_debug("solveit_list_available_mappings called")
+        try:
+            mappings = kb.list_available_mappings()
+            return json.dumps(mappings)
+        except Exception as exc:
+            return json.dumps({"error": f"Failed to list mappings: {exc}"})
+
+    server.register_tool(
+        name="solveit_list_available_mappings",
+        description=(
+            "List all available objective mapping files. "
+            "Each mapping organises the same techniques into different "
+            "investigation frameworks: solve-it.json (default SOLVE-IT "
+            "framework), carrier.json (carrier/network context), dfrws.json "
+            "(DFRWS framework). "
+            "Use solveit_load_objective_mapping to switch between them."
+        ),
+        input_schema={"type": "object", "properties": {}},
+        handler=_handle_list_mappings,
+    )
+
+    # solveit_load_objective_mapping
+    async def _handle_load_mapping(
+        arguments: dict[str, Any], context: HandlerContext
+    ) -> str:
+        await context.log_debug("solveit_load_objective_mapping called")
+        filename = arguments["filename"]
+        try:
+            success = kb.load_objective_mapping(filename)
+            current = getattr(kb, "current_mapping_name", filename)
+            if success:
+                return json.dumps({
+                    "success": True,
+                    "message": f"Successfully loaded mapping: {filename}",
+                    "current_mapping": current,
+                })
+            return json.dumps({
+                "success": False,
+                "message": f"Failed to load mapping: {filename}",
+                "current_mapping": current,
+            })
+        except Exception as exc:
+            return json.dumps({"error": f"Failed to load mapping: {exc}"})
+
+    server.register_tool(
+        name="solveit_load_objective_mapping",
+        description=(
+            "Switch to a different investigation framework mapping. "
+            "Use solveit_list_available_mappings to see valid filenames. "
+            "After loading, solveit_list_objectives and "
+            "solveit_get_techniques_for_objective will reflect the new "
+            "framework. "
+            "Use this when the user asks about techniques in the context of a "
+            "specific framework (carrier, dfrws)."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type": "string",
+                    "description": (
+                        "Mapping filename to load "
+                        "(e.g. 'carrier.json', 'dfrws.json', 'solve-it.json')."
+                    ),
+                    "minLength": 1,
+                },
+            },
+            "required": ["filename"],
+        },
+        handler=_handle_load_mapping,
+    )
+
+
+# ── Search tool ────────────────────────────────────────────────────────
+
 _VALID_SEARCH_LOGIC = {"AND", "OR"}
 
 
 def _register_search_tool(server: ChassisServer, kb: Any) -> None:
-    """Register solveit_search with schema based on [app.search] config.
-
-    Args:
-        server: The ChassisServer to register tools on.
-        kb: The KnowledgeBase instance providing the search method.
-    """
+    """Register solveit_search with schema based on [app.search] config."""
     app_cfg = getattr(server, "_app_config", None)
     if app_cfg is not None:
         search_config = {
@@ -226,7 +591,12 @@ def _register_search_tool(server: ChassisServer, kb: Any) -> None:
     properties: dict[str, Any] = {
         "keywords": {
             "type": "string",
-            "description": "Search terms. Use quotes for exact phrases.",
+            "description": (
+                "Keywords to search for. Use quotes for exact phrases "
+                "(e.g. '\"memory acquisition\"'). Multiple words are combined "
+                "using search_logic (AND by default)."
+            ),
+            "minLength": 1,
         },
     }
     required = ["keywords"]
@@ -249,7 +619,8 @@ def _register_search_tool(server: ChassisServer, kb: Any) -> None:
             "type": "boolean",
             "description": (
                 "If true, allow partial word matches. Default: false "
-                "(word-boundary matching)."
+                "(word-boundary matching). Use true for partial-term or "
+                "prefix searches."
             ),
         }
 
@@ -258,8 +629,9 @@ def _register_search_tool(server: ChassisServer, kb: Any) -> None:
             "type": "string",
             "enum": ["AND", "OR"],
             "description": (
-                "How to combine multiple keywords. "
-                "AND = all must match, OR = any can match. Default: AND."
+                "'AND' (default) requires all terms to match — use for precise "
+                "queries. 'OR' requires any term to match — use for broader "
+                "discovery."
             ),
         }
 
@@ -274,7 +646,9 @@ def _register_search_tool(server: ChassisServer, kb: Any) -> None:
 
         if search_logic not in _VALID_SEARCH_LOGIC:
             return json.dumps({
-                "error": f"Invalid search_logic '{search_logic}'. Must be AND or OR.",
+                "error": (
+                    f"Invalid search_logic '{search_logic}'. Must be AND or OR."
+                ),
             })
 
         result = kb.search(
@@ -288,8 +662,14 @@ def _register_search_tool(server: ChassisServer, kb: Any) -> None:
     server.register_tool(
         name="solveit_search",
         description=(
-            "Search the SOLVE-IT knowledge base by keywords. Returns matching "
-            "techniques, weaknesses, and mitigations sorted by relevance."
+            "Search SOLVE-IT by keyword when you don't know the exact ID. "
+            "Searches name and description fields across techniques, weaknesses, "
+            "and mitigations. Returns matching items sorted by relevance. "
+            "Use this as the starting point for discovery — then call "
+            "solveit_get_technique, solveit_get_weakness, or "
+            "solveit_get_mitigation with the IDs from the results. "
+            "Prefer 'AND' logic for precise queries, 'OR' for broader "
+            "exploration."
         ),
         input_schema={
             "type": "object",
@@ -300,10 +680,12 @@ def _register_search_tool(server: ChassisServer, kb: Any) -> None:
     )
 
 
+# ── Full-detail tools (config-gated, large payloads) ──────────────────
+
 _FULL_DETAIL_WARNING = (
     "WARNING: Returns the complete dataset which may be very large "
-    "(estimated 25,000-32,000 tokens). Use the summary listing tool "
-    "instead unless you specifically need full detail for all items."
+    "(~25,000–32,000 tokens). Use the concise listing tool instead "
+    "unless you specifically need full detail for all items."
 )
 
 _FULL_DETAIL_TOOLS: list[dict[str, str]] = [
@@ -326,12 +708,7 @@ _FULL_DETAIL_TOOLS: list[dict[str, str]] = [
 
 
 def _register_full_detail_tools(server: ChassisServer, kb: Any) -> None:
-    """Register full-detail listing tools (config-gated).
-
-    Args:
-        server: The ChassisServer to register tools on.
-        kb: The KnowledgeBase instance providing full-detail methods.
-    """
+    """Register full-detail listing tools (config-gated)."""
     for defn in _FULL_DETAIL_TOOLS:
         tool_name = defn["name"]
         method = getattr(kb, defn["method"])
@@ -353,13 +730,11 @@ def _register_full_detail_tools(server: ChassisServer, kb: Any) -> None:
         )
 
 
-def _register_extension_info_tool(server: ChassisServer, kb: Any) -> None:
-    """Register the solveit_list_loaded_extensions tool.
+# ── Extension info tool ────────────────────────────────────────────────
 
-    Args:
-        server: The ChassisServer to register tools on.
-        kb: The KnowledgeBase instance providing extension info.
-    """
+def _register_extension_info_tool(server: ChassisServer, kb: Any) -> None:
+    """Register solveit_list_loaded_extensions."""
+
     async def _handle(
         arguments: dict[str, Any], context: HandlerContext
     ) -> str:
@@ -374,13 +749,11 @@ def _register_extension_info_tool(server: ChassisServer, kb: Any) -> None:
     )
 
 
-def _register_citation_tools(server: ChassisServer, kb: Any) -> None:
-    """Register citation lookup and listing tools.
+# ── Citation tools ─────────────────────────────────────────────────────
 
-    Args:
-        server: The ChassisServer to register tools on.
-        kb: The KnowledgeBase instance providing citation data.
-    """
+def _register_citation_tools(server: ChassisServer, kb: Any) -> None:
+    """Register citation lookup, listing, and inline-resolution tools."""
+
     async def _handle_get(
         arguments: dict[str, Any], context: HandlerContext
     ) -> str:
@@ -394,8 +767,15 @@ def _register_citation_tools(server: ChassisServer, kb: Any) -> None:
     server.register_tool(
         name="solveit_get_citation",
         description=(
-            "Get a SOLVE-IT citation by its DFCite ID (e.g. DFCite-1001). "
-            "Returns bibtex and/or plaintext content."
+            "Resolve a DFCite-XXXX citation ID to its full bibliographic "
+            "reference text. "
+            "Technique and weakness responses contain DFCite-XXXX IDs in their "
+            "'references' field — call this to get the actual source title, "
+            "authors, and publication details. "
+            "Use this when a user asks about the evidence or sources behind a "
+            "technique or weakness. "
+            "Use solveit_resolve_inline_citations to batch-replace multiple "
+            "[DFCite-XXXX] markers in text more efficiently."
         ),
         input_schema={
             "type": "object",
@@ -403,6 +783,7 @@ def _register_citation_tools(server: ChassisServer, kb: Any) -> None:
                 "citation_id": {
                     "type": "string",
                     "description": "The citation ID (e.g. DFCite-1001).",
+                    "minLength": 1,
                 },
             },
             "required": ["citation_id"],
@@ -418,14 +799,65 @@ def _register_citation_tools(server: ChassisServer, kb: Any) -> None:
 
     server.register_tool(
         name="solveit_list_citations",
-        description="List all citation IDs in the SOLVE-IT knowledge base.",
+        description=(
+            "List all citation IDs (DFCite-XXXX) in the SOLVE-IT knowledge "
+            "base. Use solveit_get_citation to resolve a specific ID to its "
+            "full bibliographic text."
+        ),
         input_schema={"type": "object", "properties": {}},
         handler=_handle_list,
     )
 
+    async def _handle_resolve(
+        arguments: dict[str, Any], context: HandlerContext
+    ) -> str:
+        await context.log_debug("solveit_resolve_inline_citations called")
+        text = arguments["text"]
+        try:
+            resolved = kb.resolve_inline_citations(text)
+            return json.dumps({"resolved_text": resolved})
+        except Exception as exc:
+            return json.dumps(
+                {"error": f"Failed to resolve inline citations: {exc}"}
+            )
+
+    server.register_tool(
+        name="solveit_resolve_inline_citations",
+        description=(
+            "Replace [DFCite-XXXX] citation markers in text with full "
+            "Harvard-style citations. "
+            "Technique and weakness descriptions often contain [DFCite-XXXX] "
+            "markers — call this to expand them into readable references in "
+            "one step. "
+            "More efficient than calling solveit_get_citation for each marker "
+            "individually."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": (
+                        "Text containing [DFCite-XXXX] citation markers to "
+                        "resolve. Each marker is replaced with a Harvard-style "
+                        "inline citation."
+                    ),
+                    "minLength": 1,
+                },
+            },
+            "required": ["text"],
+        },
+        handler=_handle_resolve,
+    )
+
+
+# ── Entry point ────────────────────────────────────────────────────────
 
 def register(server: ChassisServer) -> None:
     """Register all SOLVE-IT tools.
+
+    Always registers solveit_status. Registers all other tools only
+    when the KB loaded successfully (server._kb is not None).
 
     Args:
         server: The ChassisServer instance with ``_kb`` and ``_kb_error``
@@ -440,16 +872,25 @@ def register(server: ChassisServer) -> None:
 
     app_cfg = getattr(server, "_app_config", None)
 
-    # Batch-registered tools (8)
+    # Orientation tool (1)
+    _register_database_description_tool(server, kb)
+
+    # Batch-registered tools: detail lookups + concise lists + objectives (8)
     register_simple_tools(server, kb, _BATCH_TOOLS)
 
-    # Relationship tools (5)
+    # Relationship tools: forward and reverse (5)
     _register_relationship_tools(server, kb)
 
-    # Search tool (1)
+    # Cross-traversal shortcut: technique → mitigations (1)
+    _register_mitigations_for_technique_tool(server, kb)
+
+    # Objective reverse lookup + mapping switch tools (3)
+    _register_objectives_and_mapping_tools(server, kb)
+
+    # Search tool (1, schema configurable via [app.search])
     _register_search_tool(server, kb)
 
-    # Full-detail tools (config-gated)
+    # Full-detail tools (3, config-gated — large payloads)
     enable_full_detail = (
         app_cfg.enable_full_detail_tools if app_cfg is not None
         else server._config.app.get("enable_full_detail_tools", False)
@@ -460,5 +901,5 @@ def register(server: ChassisServer) -> None:
     # Extension info tool (1)
     _register_extension_info_tool(server, kb)
 
-    # Citation tools (2)
+    # Citation tools: get, list, resolve inline (3)
     _register_citation_tools(server, kb)

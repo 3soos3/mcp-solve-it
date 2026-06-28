@@ -81,13 +81,26 @@ def _register_one(
     source: Any,
     defn: dict[str, Any],
 ) -> None:
-    """Register a single tool from a definition dict."""
+    """Register a single tool from a definition dict.
+
+    Supports FSS manifest fields (FSS-0002 §5.1) via the definition dict:
+        tool_version, idempotent, side_effects, deterministic, known_limitations.
+    """
     name = defn["name"]
     description = defn["description"]
     method_name = defn["method"]
     param = defn.get("param")
     param_description = defn.get("param_description", "")
     not_found_check = defn.get("not_found_check", False)
+    # FSS manifest fields
+    param_schema: dict[str, Any] = defn.get("param_schema", {"type": "string"})
+    fss_kwargs = {
+        "tool_version": defn.get("tool_version", "1.0.0"),
+        "idempotent": defn.get("idempotent", True),
+        "side_effects": defn.get("side_effects", False),
+        "deterministic": defn.get("deterministic", True),
+        "known_limitations": defn.get("known_limitations", ""),
+    }
 
     method = getattr(source, method_name)
 
@@ -96,7 +109,7 @@ def _register_one(
         input_schema: dict[str, Any] = {
             "type": "object",
             "properties": {
-                param: {"type": "string", "description": param_description},
+                param: {**param_schema, "description": param_description},
             },
             "required": [param],
         }
@@ -121,6 +134,7 @@ def _register_one(
             description=description,
             input_schema=input_schema,
             handler=_handle_with_param,
+            **fss_kwargs,
         )
     else:
         # Tool with no parameters
@@ -141,4 +155,5 @@ def _register_one(
             description=description,
             input_schema=input_schema,
             handler=_handle_no_param,
+            **fss_kwargs,
         )

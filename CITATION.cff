@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this software in your forensic investigations or research, please cite it as below."
+title: "SOLVE-IT MCP Server"
+abstract: "MCP server chassis providing LLM access to the SOLVE-IT Digital Forensics Knowledge Base via a security middleware pipeline."
+type: software
+# TODO: fill in the actual author(s) before publishing a release
+authors:
+  - name-particle: ""
+repository-code: "https://github.com/3soos3/mcp-solve-it"
+url: "https://github.com/3soos3/mcp-solve-it"
+license: MIT
+version: "0.1.0"
+date-released: "2026-06-28"
+keywords:
+  - digital-forensics
+  - mcp-server
+  - model-context-protocol
+  - solve-it
+  - llm
+  - knowledge-base
+  - forensic-investigation
+  - cybersecurity
+references:
+  - type: dataset
+    title: "SOLVE-IT: A Systematic Digital Forensics Framework"
+    authors:
+      - name: "SOLVE-IT-DF Team"
+    repository-code: "https://github.com/SOLVE-IT-DF/solve-it"
+    abstract: "Systematic framework for digital forensics inspired by MITRE ATT&CK"

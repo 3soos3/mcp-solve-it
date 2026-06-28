@@ -14,10 +14,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_VALID_TRANSPORTS = {"stdio"}
+_VALID_TRANSPORTS = {"stdio", "http"}
 _VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 _VALID_PROFILES = {"strict", "moderate", "permissive"}
-_VALID_AUTH_PROVIDERS = {"none", "token"}
+_VALID_AUTH_PROVIDERS = {"none", "token", "apikey", "oauth"}
+_VALID_AUTH_MODES = {"none", "apikey", "oauth"}
 _VALID_SANITIZATION_LEVELS = {"strict", "moderate", "permissive"}
 
 
@@ -88,12 +89,25 @@ class AuthConfig:
     Attributes:
         enabled: Whether authentication is enforced.
         provider: Auth provider type ('none', 'token').
+        mode: FSS auth mode ('none', 'apikey', 'oauth'). Overrides provider
+            when set. Controlled by MCP_AUTH_MODE env var.
         token: Optional token for TokenAuthProvider (prefer env var).
+        api_keys_path: Path to JSON file with hashed API keys (apikey mode).
+        api_key_max_age_days: Maximum key age in days (default 90).
+        oauth_jwks_url: JWKS endpoint URL (oauth mode).
+        oauth_audience: Expected JWT audience claim (oauth mode).
+        oauth_issuer: Expected JWT issuer claim (oauth mode).
     """
 
     enabled: bool = False
     provider: str = "none"
+    mode: str = "none"
     token: str = ""
+    api_keys_path: str = ""
+    api_key_max_age_days: int = 90
+    oauth_jwks_url: str = ""
+    oauth_audience: str = ""
+    oauth_issuer: str = ""
 
 
 @dataclass(frozen=True)
@@ -108,6 +122,10 @@ class SecurityConfig:
         input_sanitization: Input sanitization settings.
         auth: Authentication settings.
         detailed_errors: Whether error responses include internal details.
+        replay_window_seconds: Seconds outside which requests are rejected
+            as replay attacks (0 = disabled). HTTP transport only.
+        security_log_path: Path for dedicated security event log. If empty,
+            security events go to stderr alongside application logs.
     """
 
     profile: str = "strict"
@@ -117,6 +135,8 @@ class SecurityConfig:
     input_sanitization: SanitizationConfig = field(default_factory=SanitizationConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
     detailed_errors: bool = False
+    replay_window_seconds: int = 300
+    security_log_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -295,6 +315,21 @@ def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
         enabled = val.lower() in ("1", "true", "yes")
         result.setdefault("security", {}).setdefault("rate_limits", {})["enabled"] = enabled
 
+    if val := os.environ.get("MCP_AUTH_MODE"):
+        result.setdefault("security", {}).setdefault("auth", {})["mode"] = val
+
+    if val := os.environ.get("MCP_REPLAY_WINDOW_SECONDS"):
+        try:
+            result.setdefault("security", {})["replay_window_seconds"] = int(val)
+        except ValueError:
+            pass
+
+    if val := os.environ.get("MCP_SECURITY_LOG_PATH"):
+        result.setdefault("security", {})["security_log_path"] = val
+
+    if val := os.environ.get("MCP_TRANSPORT"):
+        result.setdefault("server", {})["transport"] = val
+
     return result
 
 
@@ -460,11 +495,26 @@ def _build_security_config(raw: dict[str, Any]) -> SecurityConfig:
             f"Invalid auth provider '{auth_provider}'. Valid: {_VALID_AUTH_PROVIDERS}"
         )
 
+    auth_mode = auth_raw.get("mode", "none")
+    if auth_mode not in _VALID_AUTH_MODES:
+        raise ValueError(
+            f"Invalid auth mode '{auth_mode}'. Valid: {_VALID_AUTH_MODES}"
+        )
+
     auth = AuthConfig(
         enabled=bool(auth_raw.get("enabled", False)),
         provider=auth_provider,
+        mode=auth_mode,
         token=str(auth_raw.get("token", "")),
+        api_keys_path=str(auth_raw.get("api_keys_path", "")),
+        api_key_max_age_days=int(auth_raw.get("api_key_max_age_days", 90)),
+        oauth_jwks_url=str(auth_raw.get("oauth_jwks_url", "")),
+        oauth_audience=str(auth_raw.get("oauth_audience", "")),
+        oauth_issuer=str(auth_raw.get("oauth_issuer", "")),
     )
+
+    replay_window = int(raw.get("replay_window_seconds", 300))
+    security_log_path = str(raw.get("security_log_path", ""))
 
     return SecurityConfig(
         profile=profile,
@@ -474,6 +524,8 @@ def _build_security_config(raw: dict[str, Any]) -> SecurityConfig:
         input_sanitization=sanitization,
         auth=auth,
         detailed_errors=detailed_errors,
+        replay_window_seconds=replay_window,
+        security_log_path=security_log_path,
     )
 
 

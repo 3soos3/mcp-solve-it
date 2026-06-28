@@ -18,8 +18,31 @@ from mcp.server.lowlevel.server import request_ctx
 
 from mcp_chassis.config import ServerConfig
 from mcp_chassis.context import HandlerContext
-from mcp_chassis.errors import ExtensionError, ChassisError
+from mcp_chassis.errors import (
+    ChassisError,
+    ExtensionError,
+    FSSError,
+    FSS_DATASET_UNAVAILABLE,
+    FSS_EXECUTION_FAILED,
+    FSS_EXECUTION_INTERRUPTED,
+    FSS_INTERNAL_ERROR,
+    FSS_PARAM_INVALID,
+    FSS_TOOL_UNAVAILABLE,
+)
 from mcp_chassis.middleware.pipeline import MiddlewarePipeline
+from mcp_chassis.utils.fss_context import (
+    fss_transaction_id,
+    fss_parameters_cai,
+    fss_result_cai,
+    fss_result_status,
+    fss_investigation_id,
+    fss_analyst_identity,
+    fss_agent_identity,
+    fss_client_identity,
+    reset_fss_context,
+)
+from mcp_chassis.utils.integrity import compute_json_cai
+from mcp_chassis.utils.provenance import build_provenance_record
 
 if TYPE_CHECKING:
     from mcp_chassis.transport.base import TransportBase
@@ -103,14 +126,27 @@ class ChassisServer:
 
         @self._sdk_server.list_tools()  # type: ignore[no-untyped-call, untyped-decorator]
         async def handle_list_tools() -> list[types.Tool]:
-            return [
-                types.Tool(
+            tools = []
+            for name, info in self._tools.items():
+                # Embed FSS manifest fields in inputSchema as x-fss-* extensions
+                fss_meta: dict[str, Any] = {
+                    "x-fss-tool-version": info.get("tool_version", "0.0.0"),
+                    "x-fss-idempotent": info.get("idempotent", False),
+                    "x-fss-side-effects": info.get("side_effects", False),
+                    "x-fss-deterministic": info.get("deterministic", True),
+                    "x-fss-known-limitations": info.get("known_limitations", ""),
+                }
+                if info.get("deprecated"):
+                    fss_meta["x-fss-deprecated"] = True
+                    fss_meta["x-fss-deprecated-in"] = info.get("deprecated_in", "")
+                    fss_meta["x-fss-removal-in"] = info.get("removal_in", "")
+                input_schema = {**info["input_schema"], **fss_meta}
+                tools.append(types.Tool(
                     name=name,
                     description=info["description"],
-                    inputSchema=info["input_schema"],
-                )
-                for name, info in self._tools.items()
-            ]
+                    inputSchema=input_schema,
+                ))
+            return tools
 
         @self._sdk_server.call_tool(validate_input=False)  # type: ignore[untyped-decorator]
         async def handle_call_tool(
@@ -198,6 +234,16 @@ class ChassisServer:
         rate_limit_override: dict[str, Any] | None = None,
         auth_scopes: list[str] | None = None,
         allow_overwrite: bool = False,
+        # FSS-0002 §5.1 tool manifest fields
+        tool_version: str = "0.0.0",
+        idempotent: bool = False,
+        side_effects: bool = False,
+        deterministic: bool = True,
+        known_limitations: str = "",
+        # FSS-0006 §6.2 deprecation fields
+        deprecated: bool = False,
+        deprecated_in: str = "",
+        removal_in: str = "",
     ) -> None:
         """Register a tool with the server.
 
@@ -209,7 +255,16 @@ class ChassisServer:
             rate_limit_override: Optional per-tool rate limit overrides (reserved).
             auth_scopes: Scopes required to call this tool.
             allow_overwrite: If True, silently replace an existing registration.
-                If False (default), raise ValueError on duplicate names.
+            tool_version: Semantic version of this tool implementation (FSS-0002 §5.1).
+            idempotent: Whether repeated calls with identical params produce identical
+                results and have no side effects (FSS-0002 §5.1).
+            side_effects: Whether this tool modifies external state (FSS-0002 §5.1).
+            deterministic: Whether results are fully determined by inputs (FSS-0002 §5.1).
+            known_limitations: Conditions under which the tool may return incomplete or
+                misleading results. MUST NOT be empty for production tools (FSS-0002 §5.1).
+            deprecated: Whether this tool is deprecated (FSS-0006 §6.2).
+            deprecated_in: Version in which this tool was deprecated.
+            removal_in: Version in which this tool will be removed.
         """
         if name in self._tools:
             if not allow_overwrite:
@@ -218,12 +273,27 @@ class ChassisServer:
                     "Use allow_overwrite=True to replace it intentionally."
                 )
             logger.warning("Overwriting existing tool registration: '%s'", name)
+
+        if deprecated:
+            logger.warning(
+                "Registering deprecated tool '%s' (deprecated in %s, removal in %s)",
+                name, deprecated_in or "unknown", removal_in or "unknown",
+            )
+
         self._tools[name] = {
             "description": description,
             "input_schema": input_schema,
             "handler": handler,
             "rate_limit_override": rate_limit_override,
             "auth_scopes": auth_scopes or [],
+            "tool_version": tool_version,
+            "idempotent": idempotent,
+            "side_effects": side_effects,
+            "deterministic": deterministic,
+            "known_limitations": known_limitations,
+            "deprecated": deprecated,
+            "deprecated_in": deprecated_in,
+            "removal_in": removal_in,
         }
         logger.debug("Registered tool '%s'", name)
 
@@ -344,7 +414,7 @@ class ChassisServer:
 
         return HandlerContext(
             request_id=request_id,
-            correlation_id=uuid.uuid4().hex[:12],
+            correlation_id=str(uuid.uuid4()),
             server_config=self._config,
             lifespan_state=lifespan_state,
             _session=session,
@@ -386,34 +456,89 @@ class ChassisServer:
     ) -> types.CallToolResult:
         """Run middleware pipeline and dispatch to the registered tool handler.
 
+        Implements FSS transaction lifecycle: sets context vars, computes
+        CAI digests, invokes handler, embeds _provenance record in response.
+
         Args:
             tool_name: Name of the tool to call.
             arguments: Raw tool arguments from the client.
 
         Returns:
-            CallToolResult with tool output or error details.
+            CallToolResult with tool output (including _provenance) or FSS error.
         """
-        handler_ctx = self._make_context()
+        # ── 1. Initialise FSS transaction context ─────────────────────
+        tokens: list[Any] = []  # kept for compatibility; context cleared in finally
+        transaction_id = str(uuid.uuid4())
+        fss_transaction_id.set(transaction_id)
+        fss_result_status.set("error")  # pessimistic default
 
-        if tool_name not in self._tools:
+        handler_ctx = self._make_context()
+        # Use the same UUID as the FSS transaction ID
+        handler_ctx = type(handler_ctx)(
+            request_id=handler_ctx.request_id,
+            correlation_id=transaction_id,
+            server_config=handler_ctx.server_config,
+            lifespan_state=handler_ctx.lifespan_state,
+            _session=handler_ctx._session,
+        )
+
+        def _fss_error(
+            code: str, message: str, *, partial: bool = False
+        ) -> types.CallToolResult:
+            """Build an FSS error response with provenance block.
+
+            Does NOT reset FSS context — the caller's finally block handles that.
+            """
+            fss_result_status.set("error")
+            err = FSSError(
+                error_code=code,
+                error_message=message,
+                transaction_id=transaction_id,
+                partial_result=partial,
+            )
+            try:
+                provenance = build_provenance_record(
+                    tool_name=tool_name,
+                    tool_version=self._tools.get(tool_name, {}).get(
+                        "tool_version", "0.0.0"
+                    ),
+                    kb_version_id=getattr(self, "_kb_version_id", None),
+                    kb_version=getattr(self, "_kb_version", None),
+                )
+                payload = {**err.to_dict(), "_provenance": provenance}
+            except Exception:
+                payload = err.to_dict()
             return types.CallToolResult(
                 content=[types.TextContent(
-                    type="text",
-                    text=f"TOOL_NOT_FOUND: Unknown tool '{tool_name}'",
+                    type="text", text=json.dumps(payload)
                 )],
                 isError=True,
+            )
+
+        # ── 2. Tool existence check ────────────────────────────────────
+        if tool_name not in self._tools:
+            return _fss_error(
+                FSS_TOOL_UNAVAILABLE,
+                f"Unknown tool '{tool_name}'",
             )
 
         tool_info = self._tools[tool_name]
         schema = tool_info["input_schema"]
         required_scopes: list[str] = tool_info.get("auth_scopes", [])
+        tool_version: str = tool_info.get("tool_version", "0.0.0")
 
-        # Build request context for auth. Over stdio, auth is handled by the OS
-        # (process isolation). Over HTTP (future), the transport layer will
-        # populate request_context with credentials from the Authorization header.
-        request_context: dict[str, Any] = {}
+        # ── 3. Compute parameters_cai (FSS-0005 §3.2) ─────────────────
+        try:
+            params_cai = compute_json_cai(arguments)
+            fss_parameters_cai.set(params_cai)
+        except Exception as exc:
+            logger.warning("parameters_cai computation failed: %s", exc)
 
-        # Run middleware pipeline
+        # ── 4. Middleware pipeline ─────────────────────────────────────
+        request_context: dict[str, Any] = {
+            "client_identity": fss_client_identity.get(),
+        }
+
         middleware_result = await self._middleware.process_tool_request(
             tool_name=tool_name,
             arguments=arguments,
@@ -424,54 +549,90 @@ class ChassisServer:
 
         if not middleware_result.allowed:
             logger.warning(
-                "Middleware blocked tool '%s': %s [correlation_id=%s]",
-                tool_name,
-                middleware_result.error_code,
-                middleware_result.correlation_id,
+                "Middleware blocked '%s': %s [txn=%s]",
+                tool_name, middleware_result.error_code, transaction_id,
             )
-            if self._config.security.detailed_errors:
-                message = f"{middleware_result.error_code}: {middleware_result.error_message}"
+            # Map chassis error codes to FSS taxonomy
+            code = middleware_result.error_code
+            if "AUTH" in code:
+                fss_code = "FSS_AUTH_REQUIRED"
+            elif "RATE_LIMIT" in code:
+                fss_code = FSS_EXECUTION_INTERRUPTED
             else:
-                message = (
-                    f"{middleware_result.error_code}: Request failed"
-                    f" [correlation_id={middleware_result.correlation_id}]"
-                )
-            return types.CallToolResult(
-                content=[types.TextContent(type="text", text=message)],
-                isError=True,
+                fss_code = FSS_PARAM_INVALID
+            msg = (
+                middleware_result.error_message
+                if self._config.security.detailed_errors
+                else f"Request blocked [correlation_id={transaction_id}]"
             )
+            return _fss_error(fss_code, msg)
 
         sanitized_args = middleware_result.sanitized_arguments or {}
 
-        # Invoke the handler
+        # ── 5. Invoke the handler ──────────────────────────────────────
         try:
             handler: ToolHandler = tool_info["handler"]
             result = await handler(sanitized_args, handler_ctx)
+        except TimeoutError as exc:
+            logger.error("Tool '%s' timed out: %s", tool_name, exc)
+            return _fss_error(FSS_EXECUTION_INTERRUPTED, "Tool execution timed out")
         except ChassisError as exc:
-            logger.error(
-                "Tool '%s' raised ChassisError: %s [request_correlation_id=%s]",
-                tool_name, exc, handler_ctx.correlation_id,
-            )
-            return self._make_error_result(exc)
+            logger.error("Tool '%s' raised ChassisError: %s", tool_name, exc)
+            return _fss_error(FSS_EXECUTION_FAILED, str(exc.args[0]) if exc.args else "Tool error")
         except Exception as exc:
             logger.error("Tool '%s' raised unhandled error: %s", tool_name, exc)
-            return self._make_error_result(exc, handler_ctx.correlation_id)
+            return _fss_error(FSS_INTERNAL_ERROR, "Internal server error")
 
-        # Serialize and check response size
+        # ── 6. Compute result_cai and embed provenance ─────────────────
         try:
             if isinstance(result, str):
-                response_text = result
+                try:
+                    result_obj = json.loads(result)
+                except (json.JSONDecodeError, ValueError):
+                    result_obj = result
             else:
-                response_text = json.dumps(result)
-            self._middleware.check_response_size(response_text)
-        except ChassisError as exc:
-            logger.error("Response size check failed for tool '%s': %s", tool_name, exc)
-            return self._make_error_result(exc)
-        except (TypeError, ValueError) as exc:
-            logger.error(
-                "Tool '%s' returned non-serializable result: %s", tool_name, exc
+                result_obj = result
+
+            result_cai_val = compute_json_cai(
+                result_obj if isinstance(result_obj, (dict, list)) else {"_value": result_obj}
             )
-            return self._make_error_result(exc, handler_ctx.correlation_id)
+            fss_result_cai.set(result_cai_val)
+            fss_result_status.set("success")
+
+            provenance = build_provenance_record(
+                tool_name=tool_name,
+                tool_version=tool_version,
+                kb_version_id=getattr(self, "_kb_version_id", None),
+                kb_version=getattr(self, "_kb_version", None),
+            )
+
+            if isinstance(result_obj, dict):
+                result_obj["_provenance"] = provenance
+                response_text = json.dumps(result_obj)
+            else:
+                response_text = json.dumps(
+                    {"result": result_obj, "_provenance": provenance}
+                )
+
+            self._middleware.check_response_size(response_text)
+
+        except ChassisError as exc:
+            logger.error("Response check failed for '%s': %s", tool_name, exc)
+            return _fss_error(FSS_INTERNAL_ERROR, "Response processing error")
+        except (TypeError, ValueError) as exc:
+            logger.error("Tool '%s' returned non-serializable result: %s", tool_name, exc)
+            return _fss_error(FSS_INTERNAL_ERROR, "Tool result could not be serialized")
+        finally:
+            # Explicitly reset all FSS context vars to avoid bleeding into
+            # the next sequential request on the same asyncio task
+            fss_transaction_id.set(None)
+            fss_parameters_cai.set(None)
+            fss_result_cai.set(None)
+            fss_result_status.set(None)
+            fss_investigation_id.set(None)
+            fss_analyst_identity.set(None)
+            fss_agent_identity.set(None)
+            fss_client_identity.set(None)
 
         return types.CallToolResult(
             content=[types.TextContent(type="text", text=response_text)],
@@ -747,15 +908,12 @@ class ChassisServer:
         if transport_name == "stdio":
             from mcp_chassis.transport.stdio import StdioTransport
             self._transport = StdioTransport()
-        elif transport_name == "sse":
-            from mcp_chassis.transport.http_stub import SSETransport
-            self._transport = SSETransport()
-        elif transport_name == "streamable-http":
-            from mcp_chassis.transport.http_stub import StreamableHTTPTransport
-            self._transport = StreamableHTTPTransport()
+        elif transport_name == "http":
+            from mcp_chassis.transport.http import HTTPTransport
+            self._transport = HTTPTransport()
         else:
             raise ExtensionError(
-                f"Unknown transport: '{transport_name}'",
+                f"Unknown transport: '{transport_name}'. Valid: stdio, http",
                 code="UNKNOWN_TRANSPORT",
             )
 

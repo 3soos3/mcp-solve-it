@@ -22,3 +22,6 @@ venv/
 
 # macOS Stuff
 .DS_Store
+
+# Items
+TODO*.txt

@@ -4,22 +4,40 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcp-chassis"
-version = "0.1.0"
-description = "An extensible MCP server chassis with security middleware"
+version = "1.0.0"
+description = "FSS-compliant MCP server for the SOLVE-IT digital forensics knowledge base"
 requires-python = ">=3.11"
 dependencies = [
     "mcp>=1.2.0,<2.0",
+    "jcs>=0.3.0",
 ]
 
 [project.scripts]
 mcp-chassis = "mcp_chassis.__main__:main"
 
 [project.optional-dependencies]
+http = [
+    "starlette>=0.37.0",
+    "uvicorn[standard]>=0.27.0",
+    "httpx>=0.25,<1.0",
+]
+auth = [
+    "PyJWT>=2.8.0",
+    "cryptography>=42.0.0",
+    "httpx>=0.25,<1.0",
+]
+otel = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "mypy>=1.11.0",
     "ruff>=0.7.0",
+    "locust>=2.20.0",
+    "pip-audit>=2.7.0",
 ]
 
 [tool.hatch.build.targets.wheel]

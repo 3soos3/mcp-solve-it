@@ -1,0 +1,222 @@
+name: License Compliance Check
+
+# Checks all transitive dependencies for GPL/AGPL/SSPL licenses.
+# Fails if any incompatible license is found.
+# Runs on pull_request and push to main.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      dependencies: ${{ steps.filter.outputs.dependencies }}
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            dependencies:
+              - 'pyproject.toml'
+              - 'requirements*.txt'
+              - 'Dockerfile*'
+              - '.github/workflows/license-compliance.yml'
+
+  check-licenses:
+    name: Check Dependency Licenses
+    runs-on: ubuntu-latest
+    needs: changes
+    if: |
+      needs.changes.outputs.dependencies == 'true' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install package and pip-licenses
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install pip-licenses
+
+      - name: Scan licenses
+        id: scan
+        run: |
+          echo "## Dependency Licenses" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          pip-licenses --format=markdown --order=license >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          pip-licenses --format=json --output-file=licenses.json
+          pip-licenses --format=markdown --output-file=licenses.md
+
+      - name: Check for GPL/AGPL/SSPL (incompatible with MIT)
+        run: |
+          echo "Checking for incompatible licenses..."
+
+          if grep -iE '"License"\s*:\s*"[^"]*\b(GPL|AGPL|SSPL)\b' licenses.json; then
+            echo "::error::Found GPL/AGPL/SSPL licensed dependency — incompatible with MIT"
+            echo "Incompatible licenses found:" >> $GITHUB_STEP_SUMMARY
+            grep -iE '"License"\s*:\s*"[^"]*\b(GPL|AGPL|SSPL)\b' licenses.json >> $GITHUB_STEP_SUMMARY || true
+            exit 1
+          else
+            echo "::notice::No incompatible licenses found"
+            echo "All licenses compatible with MIT." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload license report
+        if: always()
+        uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        with:
+          name: license-report
+          path: |
+            licenses.json
+            licenses.md
+          retention-days: 90
+
+  generate-notice:
+    name: Generate NOTICE File
+    runs-on: ubuntu-latest
+    needs: check-licenses
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          token: ${{ secrets.PAT || secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install package and pip-licenses
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install pip-licenses
+
+      - name: Generate NOTICE file
+        run: |
+          {
+            echo "THIRD-PARTY SOFTWARE NOTICES AND INFORMATION"
+            echo "======================================================================"
+            echo ""
+            echo "mcp-chassis"
+            echo "======================================================================"
+            echo ""
+            echo "Package: mcp-chassis"
+            echo "Source:  https://github.com/${{ github.repository }}"
+            echo "License: MIT"
+            echo ""
+            echo "======================================================================"
+            echo ""
+            echo "THIRD-PARTY DEPENDENCIES"
+            echo "======================================================================"
+            echo ""
+            echo "This project incorporates components from third-party projects."
+            echo "Original copyright notices and licenses are reproduced below."
+            echo ""
+            echo "======================================================================"
+            echo ""
+          } > NOTICE
+
+          pip-licenses --format=plain-vertical >> NOTICE
+
+          echo "" >> NOTICE
+          echo "======================================================================" >> NOTICE
+          echo "This file is automatically generated by the License Compliance workflow." >> NOTICE
+          echo "Last updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> NOTICE
+
+      - name: Check if NOTICE changed
+        id: notice-changed
+        run: |
+          git add NOTICE
+          if git diff --staged --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request for NOTICE update
+        if: steps.notice-changed.outputs.changed == 'true'
+        id: create-pr
+        uses: peter-evans/create-pull-request@b1ddad2c994a25fbc81a28b3ec0e368bb2021c50 # v6.0.0
+        with:
+          token: ${{ secrets.PAT || secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          commit-message: "chore: Update NOTICE file with dependency licenses"
+          branch: automated/update-notice
+          delete-branch: true
+          title: "chore: Update NOTICE file with dependency licenses"
+          body: |
+            ## Automated NOTICE File Update
+
+            This PR updates the NOTICE file with current dependency licenses.
+
+            **Triggered by**: ${{ github.event_name }}
+
+            ### Changes
+            - Updated NOTICE file with latest dependency licenses
+
+            ### Review Checklist
+            - [ ] No new GPL/AGPL/SSPL licenses introduced
+            - [ ] All dependencies properly attributed
+
+            _This is an automated PR created by the License Compliance workflow._
+          labels: |
+            automated
+            dependencies
+
+  license-summary:
+    name: License Summary
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: [changes, check-licenses]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## License Compliance Check Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.check-licenses.result }}" = "success" ]; then
+            echo "License Scan: Passed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "All dependency licenses are compatible with MIT." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.check-licenses.result }}" = "skipped" ]; then
+            echo "License Scan: Skipped" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No dependency changes detected — scan skipped." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "License Scan: Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Incompatible licenses detected. Please review the license report artifact." >> $GITHUB_STEP_SUMMARY
+          fi
