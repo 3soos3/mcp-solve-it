@@ -9,7 +9,7 @@ description = "FSS-compliant MCP server for the SOLVE-IT digital forensics knowl
 requires-python = ">=3.11"
 dependencies = [
     "mcp>=1.2.0,<2.0",
-    "jcs>=0.3.0",
+    "jcs>=0.2.0",
 ]
 
 [project.scripts]
