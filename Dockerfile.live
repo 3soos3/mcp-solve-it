@@ -1,0 +1,106 @@
+# syntax=docker/dockerfile:1.4
+# Live Dockerfile for mcp-chassis (SOLVE-IT MCP Server) — Alpine Linux
+# No SOLVE-IT data is baked in. The entrypoint fetches the latest data from
+# SOLVE_IT_DATA_URL at container startup and falls back to the cached copy
+# on failure. Use a persistent volume at /tmp/app-cache for the cache.
+#
+# Not FSS-compliant (FORENSIC_METADATA=false) — use Dockerfile for
+# evidentiary deployments.
+#
+# Multi-architecture: linux/amd64, linux/arm64, linux/arm/v7
+
+# ============================================================================
+# Stage 1: Builder
+# ============================================================================
+FROM python:3.11-alpine AS builder
+
+ARG MCP_VERSION=unknown
+
+RUN apk add --no-cache --virtual .build-deps \
+    build-base \
+    libffi-dev \
+    openssl-dev \
+    git \
+    cargo \
+    rust
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /build
+COPY pyproject.toml README.md ./
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir . && \
+    pip uninstall -y pip setuptools wheel 2>/dev/null || true && \
+    find /opt/venv -type f -name '*.pyc' -delete && \
+    find /opt/venv -type f -name '*.pyo' -delete && \
+    find /opt/venv -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+
+RUN apk del .build-deps
+
+# ============================================================================
+# Stage 2: Runtime
+# ============================================================================
+FROM python:3.11-alpine AS runtime
+
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION=live
+ARG MCP_VERSION=unknown
+
+LABEL org.opencontainers.image.created="${BUILD_DATE:-1970-01-01T00:00:00Z}" \
+      org.opencontainers.image.source="https://github.com/3soos3/solve-it-mcp-v2" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.title="SOLVE-IT MCP Server :live (chassis)" \
+      org.opencontainers.image.description="MCP server for SOLVE-IT — data fetched at startup, not baked in" \
+      org.opencontainers.image.licenses="MIT"
+
+RUN apk add --no-cache \
+        ca-certificates \
+        libffi \
+        openssl \
+        unzip \
+        wget && \
+    addgroup -g 1000 mcpuser && \
+    adduser -D -u 1000 -G mcpuser -h /home/mcpuser -s /bin/sh mcpuser && \
+    chmod 750 /home/mcpuser && \
+    mkdir -p /tmp/app-cache/solve-it /tmp/app-tmp && \
+    chown -R mcpuser:mcpuser /tmp/app-cache /tmp/app-tmp && \
+    rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY --chown=mcpuser:mcpuser src/ /app/src/
+COPY --chown=mcpuser:mcpuser config/ /app/config/
+COPY --chown=mcpuser:mcpuser docker-entrypoint-live.sh /app/docker-entrypoint-live.sh
+RUN chmod +x /app/docker-entrypoint-live.sh
+
+USER mcpuser
+
+ENV PYTHONPATH=/app/src \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    MCP_CHASSIS_CONFIG=/app/config/default.toml \
+    SOLVE_IT_DATA_URL=https://data.solveit-df.org/solve-it-latest.zip \
+    SOLVE_IT_DATA_DIR=/tmp/app-cache/solve-it \
+    MCP_TRANSPORT=http \
+    HTTP_HOST=0.0.0.0 \
+    HTTP_PORT=8000 \
+    MCP_OTEL_ENABLED=false \
+    ENVIRONMENT=live \
+    LOG_LEVEL=INFO \
+    FORENSIC_METADATA=false \
+    TMPDIR=/tmp/app-tmp
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${HTTP_PORT}/healthz || exit 1
+
+ENTRYPOINT ["/app/docker-entrypoint-live.sh"]
