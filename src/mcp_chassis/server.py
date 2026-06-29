@@ -466,6 +466,35 @@ class ChassisServer:
         Returns:
             CallToolResult with tool output (including _provenance) or FSS error.
         """
+        # Record OTel metric for the full dispatch (including error paths)
+        _metrics_start: float | None = None
+        try:
+            from mcp_chassis.utils.metrics import get_metrics
+            _metrics_start = get_metrics().record_call_start(tool_name)
+        except Exception:
+            pass
+
+        result = await self._dispatch_tool_inner(tool_name, arguments)
+
+        try:
+            if _metrics_start is not None:
+                from mcp_chassis.utils.metrics import get_metrics
+                get_metrics().record_call_end(
+                    tool_name,
+                    _metrics_start,
+                    error_code="" if not result.isError else "error",
+                )
+        except Exception:
+            pass
+
+        return result
+
+    async def _dispatch_tool_inner(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> types.CallToolResult:
+        """Inner dispatch — FSS lifecycle, middleware, handler invocation."""
         # ── 1. Initialise FSS transaction context ─────────────────────
         tokens: list[Any] = []  # kept for compatibility; context cleared in finally
         transaction_id = str(uuid.uuid4())
