@@ -31,7 +31,7 @@ concurrency:
 env:
   GHCR_REPO: ghcr.io/${{ github.repository }}
   DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO }}
-  PLATFORMS: linux/amd64,linux/arm64,linux/arm/v7
+  PLATFORMS: linux/amd64,linux/arm64
   DOCKERHUB_MONTHLY_RETAIN: 12
 
 jobs:
@@ -197,7 +197,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [linux/amd64, linux/arm64, linux/arm/v7]
+        platform: [linux/amd64, linux/arm64]
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
       - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0

@@ -25,7 +25,7 @@ concurrency:
 env:
   GHCR_REPO: ghcr.io/${{ github.repository }}
   DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO }}
-  PLATFORMS: linux/amd64,linux/arm64,linux/arm/v7
+  PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
   build:
