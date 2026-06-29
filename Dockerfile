@@ -6,7 +6,7 @@
 #   monthly            — bake SHA-pinned SOLVE-IT HEAD; FORENSIC_METADATA=false
 #   live               — no data baked in; entrypoint fetches at startup
 #
-# Multi-architecture: linux/amd64, linux/arm64, linux/arm/v7
+# Multi-architecture: linux/amd64, linux/arm64
 
 # ============================================================================
 # Stage 1: Builder
