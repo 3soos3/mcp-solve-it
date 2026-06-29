@@ -1,0 +1,67 @@
+# Test-only Dockerfile: uses local SOLVE-IT data via --build-context solveit=...
+# Avoids GitHub clone and Rust/Cargo build deps for fast local testing.
+# DO NOT use in production — use Dockerfile instead.
+
+FROM python:3.11-slim AS builder
+
+ARG SOLVE_IT_MODE=release
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libffi-dev libssl-dev git && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /build
+COPY pyproject.toml README.md ./
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir .
+
+# Copy local SOLVE-IT data for release/monthly; empty dir for live
+RUN mkdir -p /tmp/solve-it-main
+COPY --from=solveit . /tmp/solve-it-main-src/
+RUN if [ "$SOLVE_IT_MODE" != "live" ]; then \
+      cp -r /tmp/solve-it-main-src/. /tmp/solve-it-main/; \
+    fi
+
+FROM python:3.11-slim AS runtime
+
+ARG SOLVE_IT_MODE=release
+ARG FORENSIC_METADATA=true
+ARG VERSION=test
+ARG SOLVE_IT_VERSION=local-test
+
+RUN apt-get update && apt-get install -y --no-install-recommends wget unzip && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd -g 1000 mcpuser && \
+    useradd -u 1000 -g mcpuser -m -s /bin/sh mcpuser && \
+    mkdir -p /tmp/app-cache/solve-it /tmp/app-tmp && \
+    chown -R mcpuser:mcpuser /tmp/app-cache /tmp/app-tmp
+
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY --chown=mcpuser:mcpuser src/ /app/src/
+COPY --chown=mcpuser:mcpuser config/ /app/config/
+COPY --chown=mcpuser:mcpuser docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+COPY --from=builder --chown=mcpuser:mcpuser /tmp/solve-it-main /app/solve-it-main
+
+USER mcpuser
+
+ENV PYTHONPATH=/app/src \
+    PYTHONUNBUFFERED=1 \
+    MCP_CHASSIS_CONFIG=/app/config/default.toml \
+    MCP_TRANSPORT=stdio \
+    SOLVE_IT_MODE=${SOLVE_IT_MODE} \
+    FORENSIC_METADATA=${FORENSIC_METADATA} \
+    SOLVE_IT_VERSION=${SOLVE_IT_VERSION} \
+    MCP_APP_SOLVEIT_DATA_PATH=/app/solve-it-main \
+    SOLVE_IT_DATA_URL=https://data.solveit-df.org/solve-it-latest.zip \
+    SOLVE_IT_DATA_DIR=/tmp/app-cache/solve-it \
+    TMPDIR=/tmp/app-tmp
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
