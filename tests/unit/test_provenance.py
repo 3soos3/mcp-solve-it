@@ -133,11 +133,19 @@ class TestEvidentiaryStatus:
     def teardown_method(self) -> None:
         _clear_context()
 
-    def test_success_is_evidentiary(self) -> None:
+    def test_success_is_evidentiary(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FORENSIC_METADATA", "true")
         _set_context(result_status="success")
         record = build_provenance_record("tool", "1.0.0")
         assert record["evidentiary_status"] == "evidentiary"
         assert record["result_status"] == "success"
+
+    def test_success_without_forensic_metadata_is_non_evidentiary(self,
+            monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FORENSIC_METADATA", "false")
+        _set_context(result_status="success")
+        record = build_provenance_record("tool", "1.0.0")
+        assert record["evidentiary_status"] == "non-evidentiary"
 
     def test_error_is_non_evidentiary(self) -> None:
         _set_context(result_status="error")
