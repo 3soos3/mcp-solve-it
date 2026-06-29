@@ -3,31 +3,29 @@
 
 version: 2
 updates:
-  # Python (pip) dependencies
+  # Python (pip) dependencies — all updates in one PR, auto-merged when gate passes
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "03:00"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     labels:
       - "dependencies"
       - "python"
+      - "automerge"
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
     groups:
-      python-patches:
+      python-all:
         patterns:
           - "*"
         update-types:
           - "patch"
-      python-minor:
-        patterns:
-          - "*"
-        update-types:
           - "minor"
+          - "major"
 
   # GitHub Actions dependencies — all updates in one PR, auto-merged when gate passes
   - package-ecosystem: "github-actions"
