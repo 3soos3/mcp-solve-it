@@ -188,8 +188,6 @@ def sign_provenance(payload: dict[str, Any], key: Any) -> str:
                   "result_cai", "timestamp_utc")
         if k in payload
     }
-    canonical = compute_json_cai.__wrapped__(signed_fields)  # get bytes before hashing
-    # Actually sign the canonical bytes directly
     if _JCS_AVAILABLE:
         message = _jcs.canonicalize(signed_fields)
     else:
