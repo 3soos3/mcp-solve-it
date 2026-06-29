@@ -39,17 +39,19 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Live mode: no bundled data — entrypoint fetches or uses a mounted volume.
 # The solveit runtime deps (pybtex, rdflib, etc.) are already installed above
 # via .[solveit]; no secondary pip install needed from requirements.txt.
-RUN if [ "$SOLVE_IT_MODE" != "live" ]; then \
-      git clone https://github.com/SOLVE-IT-DF/solve-it.git /tmp/solve-it-main; \
+RUN git clone --depth=1 https://github.com/SOLVE-IT-DF/solve-it.git /tmp/solve-it-main && \
+    if [ "$SOLVE_IT_MODE" != "live" ]; then \
       if [ -n "$SOLVEIT_SHA" ]; then \
+        git -C /tmp/solve-it-main fetch --depth=1 origin "$SOLVEIT_SHA" && \
         git -C /tmp/solve-it-main checkout "$SOLVEIT_SHA"; \
       elif [ -n "$SOLVE_IT_VERSION" ] && [ "$SOLVE_IT_VERSION" != "main" ]; then \
+        git -C /tmp/solve-it-main fetch --depth=1 origin "refs/tags/$SOLVE_IT_VERSION" && \
         git -C /tmp/solve-it-main checkout "$SOLVE_IT_VERSION"; \
       fi; \
-      rm -rf /tmp/solve-it-main/.git; \
     else \
-      mkdir -p /tmp/solve-it-main; \
-    fi
+      rm -rf /tmp/solve-it-main/data /tmp/solve-it-main/extension_data; \
+    fi && \
+    rm -rf /tmp/solve-it-main/.git
 
 # Remove pip/setuptools/wheel and clean up after all installs are done.
 RUN pip uninstall -y pip setuptools wheel 2>/dev/null || true && \
@@ -73,7 +75,7 @@ ARG SOLVE_IT_VERSION=unknown
 ARG MCP_VERSION=unknown
 
 LABEL org.opencontainers.image.created="${BUILD_DATE:-1970-01-01T00:00:00Z}" \
-      org.opencontainers.image.source="https://github.com/3soos3/solve-it-mcp-v2" \
+      org.opencontainers.image.source="https://github.com/3soos3/mcp-solve-it" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.title="SOLVE-IT MCP Server (chassis)" \
