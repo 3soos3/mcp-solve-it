@@ -17,8 +17,10 @@ services:
 
     build:
       context: .
-      dockerfile: Dockerfile.live
+      dockerfile: Dockerfile
       args:
+        SOLVE_IT_MODE: live
+        FORENSIC_METADATA: "false"
         VERSION: live
 
     environment:
