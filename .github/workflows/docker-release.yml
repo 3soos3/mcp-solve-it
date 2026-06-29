@@ -189,7 +189,7 @@ jobs:
           sbom: true
 
       - name: Prune old Docker Hub compound tags (keep last 12)
-        if: vars.DOCKERHUB_REPO != '' && secrets.DOCKERHUB_TOKEN != ''
+        if: vars.DOCKERHUB_REPO != ''
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO }}
