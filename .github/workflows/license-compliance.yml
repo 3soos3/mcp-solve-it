@@ -100,8 +100,11 @@ jobs:
   generate-notice:
     name: Generate NOTICE File
     runs-on: ubuntu-latest
-    needs: check-licenses
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [changes, check-licenses]
+    if: |
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.dependencies == 'true'
     permissions:
       contents: write
       pull-requests: write
