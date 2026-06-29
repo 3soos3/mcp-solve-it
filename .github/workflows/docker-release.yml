@@ -313,7 +313,7 @@ jobs:
           COSIGN_EXPERIMENTAL: 1
         run: |
           cosign attest --yes \
-            --predicate sbom-spdx.json --type spdx \
+            --predicate sbom-spdx.json --type spdxjson \
             "${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }}@${{ needs.build.outputs.digest }}"
       - name: Upload SBOM artifact (retained forever — forensic evidence)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
