@@ -51,7 +51,7 @@ jobs:
 
       - name: Upload audit report
         if: always()
-        uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pip-audit-report
           path: pip-audit.json
@@ -59,7 +59,7 @@ jobs:
 
       - name: Open issue on failure
         if: steps.audit.outputs.exit_code != '0'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
