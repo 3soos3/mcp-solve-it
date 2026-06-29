@@ -1,0 +1,312 @@
+name: Docker - Build & Publish :monthly
+
+# Monthly rebuild of the :monthly image on the 1st of each month.
+# Pins SOLVE-IT to the exact HEAD SHA at build time (not floating main).
+# Published as :monthly, :YYYY-MM, :sha-<mcp-sha> to GHCR.
+# Published as :monthly, :YYYY-MM to Docker Hub (last 12 :YYYY-MM retained).
+# Post-publish: Trivy scan (all arches), Cosign sign, SBOM, SLSA provenance.
+# FORENSIC_METADATA=false — use :<version> for evidentiary deployments.
+#
+# Zenodo snapshot deposit: NOT YET IMPLEMENTED.
+# Manual setup required:
+#   1. Create Zenodo deposit "SOLVE-IT MCP Server — Monthly Snapshots"
+#   2. Add secrets: ZENODO_SNAPSHOTS_TOKEN, ZENODO_SNAPSHOTS_CONCEPT
+#   3. Uncomment the zenodo-snapshot job below
+
+on:
+  schedule:
+    - cron: '0 6 1 * *'   # 1st of month 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force rebuild even if no changes'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  GHCR_REPO: ghcr.io/${{ github.repository }}
+  DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO }}
+  PLATFORMS: linux/amd64,linux/arm64,linux/arm/v7
+  DOCKERHUB_MONTHLY_RETAIN: 12
+
+jobs:
+  check:
+    name: Check if rebuild needed
+    runs-on: ubuntu-latest
+    outputs:
+      rebuild: ${{ steps.decide.outputs.rebuild }}
+      mcp_sha: ${{ steps.decide.outputs.mcp_sha }}
+      mcp_version: ${{ steps.decide.outputs.mcp_version }}
+      solveit_sha: ${{ steps.solveit.outputs.solveit_sha }}
+      month_tag: ${{ steps.decide.outputs.month_tag }}
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          fetch-depth: 0
+
+      - name: Pin SOLVE-IT HEAD SHA
+        id: solveit
+        run: |
+          SOLVEIT_SHA=$(git ls-remote https://github.com/SOLVE-IT-DF/solve-it.git HEAD | cut -f1)
+          if [ -z "$SOLVEIT_SHA" ]; then
+            echo "::error::Cannot determine SOLVE-IT HEAD SHA — aborting"
+            exit 1
+          fi
+          echo "solveit_sha=${SOLVEIT_SHA}" >> $GITHUB_OUTPUT
+          echo "::notice::SOLVE-IT SHA: ${SOLVEIT_SHA}"
+
+      - name: Decide rebuild
+        id: decide
+        run: |
+          MCP_SHA=$(git rev-parse --short HEAD)
+          MCP_VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          MONTH_TAG=$(date -u '+%Y-%m')
+
+          echo "mcp_sha=${MCP_SHA}"       >> $GITHUB_OUTPUT
+          echo "mcp_version=${MCP_VERSION}" >> $GITHUB_OUTPUT
+          echo "month_tag=${MONTH_TAG}"   >> $GITHUB_OUTPUT
+
+          PUBLISHED=$(docker manifest inspect ${{ env.GHCR_REPO }}:${MONTH_TAG} 2>/dev/null \
+            | jq -r '.annotations["org.opencontainers.image.revision"] // empty' || echo "")
+
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "rebuild=true" >> $GITHUB_OUTPUT
+          elif [ -z "$PUBLISHED" ]; then
+            echo "rebuild=true" >> $GITHUB_OUTPUT
+            echo "::notice::No :${MONTH_TAG} image found — building"
+          elif [ "$PUBLISHED" != "$MCP_SHA" ]; then
+            echo "rebuild=true" >> $GITHUB_OUTPUT
+            echo "::notice::MCP SHA changed since last :${MONTH_TAG}"
+          else
+            echo "rebuild=false" >> $GITHUB_OUTPUT
+            echo "::notice::Already built for ${MONTH_TAG} at ${MCP_SHA} — skipping"
+          fi
+
+  build:
+    name: Build & Publish :monthly
+    needs: check
+    if: needs.check.outputs.rebuild == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        if: vars.DOCKERHUB_REPO != ''
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v5.1.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          tags: |
+            ${{ env.GHCR_REPO }}:monthly
+            ${{ env.GHCR_REPO }}:${{ needs.check.outputs.month_tag }}
+            ${{ env.GHCR_REPO }}:sha-${{ needs.check.outputs.mcp_sha }}
+            ${{ vars.DOCKERHUB_REPO != '' && format('{0}:monthly', env.DOCKERHUB_REPO) || '' }}
+            ${{ vars.DOCKERHUB_REPO != '' && format('{0}:{1}', env.DOCKERHUB_REPO, needs.check.outputs.month_tag) || '' }}
+          build-args: |
+            SOLVE_IT_MODE=monthly
+            FORENSIC_METADATA=false
+            SOLVEIT_SHA=${{ needs.check.outputs.solveit_sha }}
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+            VCS_REF=${{ needs.check.outputs.mcp_sha }}
+            VERSION=${{ needs.check.outputs.mcp_version }}
+          labels: |
+            org.opencontainers.image.revision=${{ needs.check.outputs.mcp_sha }}
+            org.opencontainers.image.version=${{ needs.check.outputs.mcp_version }}
+          cache-from: type=gha,scope=monthly
+          cache-to: type=gha,mode=max,scope=monthly
+          provenance: true
+          sbom: true
+
+      - name: Prune old Docker Hub :YYYY-MM tags (keep last 12)
+        if: vars.DOCKERHUB_REPO != '' && secrets.DOCKERHUB_TOKEN != ''
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO }}
+          RETAIN: ${{ env.DOCKERHUB_MONTHLY_RETAIN }}
+        run: |
+          # Get all YYYY-MM tags sorted oldest first
+          TOKEN=$(curl -sf -X POST \
+            "https://hub.docker.com/v2/users/login" \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"${{ secrets.DOCKERHUB_USERNAME }}\",\"password\":\"${DOCKERHUB_TOKEN}\"}" \
+            | jq -r '.token')
+
+          OWNER=$(echo "$DOCKERHUB_REPO" | cut -d/ -f1)
+          REPO=$(echo "$DOCKERHUB_REPO" | cut -d/ -f2)
+
+          TAGS=$(curl -sf \
+            "https://hub.docker.com/v2/repositories/${OWNER}/${REPO}/tags/?page_size=100" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            | jq -r '.results[].name' \
+            | grep -E '^[0-9]{4}-[0-9]{2}$' \
+            | sort)
+
+          COUNT=$(echo "$TAGS" | grep -c . || true)
+          TO_DELETE=$(( COUNT - RETAIN ))
+
+          if [ "$TO_DELETE" -gt 0 ]; then
+            echo "$TAGS" | head -n "$TO_DELETE" | while read -r TAG; do
+              echo "Deleting old tag: $TAG"
+              curl -sf -X DELETE \
+                "https://hub.docker.com/v2/repositories/${OWNER}/${REPO}/tags/${TAG}/" \
+                -H "Authorization: Bearer ${TOKEN}"
+            done
+          else
+            echo "::notice::${COUNT} tags present — no pruning needed (retain=${RETAIN})"
+          fi
+
+  trivy-scan:
+    name: Trivy scan (${{ matrix.platform }})
+    needs: [check, build]
+    if: needs.check.outputs.rebuild == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux/amd64, linux/arm64, linux/arm/v7]
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+      - name: Login to GHCR
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull and export
+        run: |
+          PTAG=$(echo "${{ matrix.platform }}" | tr '/' '-' | sed 's/linux-//')
+          docker pull --platform ${{ matrix.platform }} \
+            ${{ env.GHCR_REPO }}:${{ needs.check.outputs.month_tag }}
+          docker save ${{ env.GHCR_REPO }}:${{ needs.check.outputs.month_tag }} \
+            -o /tmp/image-${PTAG}.tar
+          echo "PTAG=${PTAG}" >> $GITHUB_ENV
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          input: /tmp/image-${{ env.PTAG }}.tar
+          format: sarif
+          output: trivy-monthly-${{ env.PTAG }}.sarif
+          severity: CRITICAL,HIGH
+          scanners: vuln
+        continue-on-error: true
+      - uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
+        if: always()
+        with:
+          sarif_file: trivy-monthly-${{ env.PTAG }}.sarif
+          category: trivy-monthly-${{ env.PTAG }}
+        continue-on-error: true
+      - name: Fail on CRITICAL
+        run: |
+          COUNT=$(trivy image --input /tmp/image-${{ env.PTAG }}.tar \
+            --format json --severity CRITICAL --scanners vuln --quiet \
+            | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length')
+          [ "$COUNT" -gt 0 ] && echo "::error::${COUNT} CRITICAL CVEs on ${{ matrix.platform }}" && exit 1
+          echo "::notice::No CRITICAL CVEs on ${{ matrix.platform }}"
+
+  sign:
+    name: Sign & Attest
+    needs: [check, build, trivy-scan]
+    if: needs.check.outputs.rebuild == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+      - uses: anchore/sbom-action/download-syft@ab9d16d4b419c9d1a02df5213fa0ebe965ca5a57 # v0.15.9
+      - name: Login to GHCR
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Sign with Cosign
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign sign --yes \
+            "${{ env.GHCR_REPO }}:${{ needs.check.outputs.month_tag }}@${{ needs.build.outputs.digest }}"
+      - name: Generate SBOM
+        run: |
+          syft "${{ env.GHCR_REPO }}@${{ needs.build.outputs.digest }}" \
+            -o spdx-json=sbom-spdx.json -o cyclonedx-json=sbom-cyclonedx.json
+      - name: Attach SBOM
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign attest --yes \
+            --predicate sbom-spdx.json --type spdx \
+            "${{ env.GHCR_REPO }}:${{ needs.check.outputs.month_tag }}@${{ needs.build.outputs.digest }}"
+      - name: Upload SBOM artifact (90 days)
+        uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        with:
+          name: sbom-monthly-${{ needs.check.outputs.month_tag }}-${{ github.run_id }}
+          path: sbom-*.json
+          retention-days: 90
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.GHCR_REPO }}
+          subject-digest: ${{ needs.build.outputs.digest }}
+          push-to-registry: true
+
+  # ── Zenodo snapshot deposit ────────────────────────────────────────────────
+  # NOT YET ACTIVE — requires manual one-time setup (see TODO.txt L3-08 B):
+  #   1. Create Zenodo deposit "SOLVE-IT MCP Server — Monthly Snapshots"
+  #   2. Publish once to get concept record ID
+  #   3. Add secrets: ZENODO_SNAPSHOTS_TOKEN, ZENODO_SNAPSHOTS_CONCEPT
+  # Then uncomment this job and remove the 'if: false' guard.
+  #
+  # zenodo-snapshot:
+  #   needs: [check, build, trivy-scan, sign]
+  #   if: false   # remove after manual Zenodo setup
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Clone SOLVE-IT at pinned SHA
+  #       run: |
+  #         git clone https://github.com/SOLVE-IT-DF/solve-it.git /tmp/solve-it
+  #         git -C /tmp/solve-it checkout ${{ needs.check.outputs.solveit_sha }}
+  #         zip -r solve-it-data-${{ needs.check.outputs.month_tag }}.zip /tmp/solve-it/data/
+  #     - name: Deposit to Zenodo
+  #       env:
+  #         TOKEN: ${{ secrets.ZENODO_SNAPSHOTS_TOKEN }}
+  #         CONCEPT: ${{ vars.ZENODO_SNAPSHOTS_CONCEPT }}
+  #       run: |
+  #         # See TODO.txt L3-08 B for full API calls
+  #         echo "Zenodo deposit not yet implemented"
