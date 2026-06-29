@@ -15,8 +15,11 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /build
 COPY pyproject.toml README.md ./
+# Install SOLVE-IT library runtime deps alongside our package
+COPY --from=solveit requirements.txt /tmp/solveit-requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir .
+    pip install --no-cache-dir . && \
+    grep -v pytest /tmp/solveit-requirements.txt | pip install --no-cache-dir -r /dev/stdin
 
 # Copy local SOLVE-IT data for release/monthly; empty dir for live
 RUN mkdir -p /tmp/solve-it-main
