@@ -7,11 +7,13 @@ counts (for pinned releases), and minimum thresholds (for rolling builds).
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 # ── Volume / env shorthands ───────────────────────────────────────────────────
 
-SOLVEIT_VOL = "SOLVE_IT_DATA_PATH:/tmp/app-cache/solve-it:ro,Z"
+_KB_PATH = os.environ.get("SOLVE_IT_DATA_PATH", "")
+SOLVEIT_VOL = f"{_KB_PATH}:/tmp/app-cache/solve-it:ro,Z" if _KB_PATH else ""
 FAST_FAIL = "SOLVE_IT_DATA_URL=http://0.0.0.0/fail"
 DEGRADED = "MCP_APP_INIT_REQUIRED=false"
 

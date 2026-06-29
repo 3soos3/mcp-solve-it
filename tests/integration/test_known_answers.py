@@ -5,7 +5,7 @@ inspecting the raw SOLVE-IT JSON files directly — NOT by running the tool
 first and recording the output. Expected values are pinned to:
 
     SOLVE-IT git tag: v0.2026-06
-    Data path:        SOLVE_IT_DATA_PATH
+    Data path:        set via SOLVE_IT_DATA_PATH env var
     KB counts:        181 techniques, 307 weaknesses, 256 mitigations
                       (enable_extensions=False, base KB only)
 
@@ -27,10 +27,7 @@ import pytest
 
 # ── SOLVE-IT data path ────────────────────────────────────────────────────────
 
-_SOLVEIT_PATH = os.environ.get(
-    "SOLVE_IT_DATA_PATH",
-    "SOLVE_IT_DATA_PATH",
-)
+_SOLVEIT_PATH = os.environ.get("SOLVE_IT_DATA_PATH", "")
 
 pytestmark = [pytest.mark.kat, pytest.mark.integration]
 
