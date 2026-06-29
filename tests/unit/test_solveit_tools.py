@@ -16,6 +16,11 @@ from mcp_chassis.extensions.solveit_init import SolveItAppConfig
 
 _SOLVEIT_PATH = str((Path(__file__).resolve().parents[3] / "solve-it" / "solve-it-main").resolve())
 
+pytestmark = pytest.mark.skipif(
+    not Path(_SOLVEIT_PATH).exists(),
+    reason="solve-it KB not available at expected path",
+)
+
 
 def _make_context() -> HandlerContext:
     return HandlerContext(
