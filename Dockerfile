@@ -32,17 +32,13 @@ COPY pyproject.toml README.md ./
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir . && \
-    pip uninstall -y pip setuptools wheel 2>/dev/null || true && \
-    find /opt/venv -type f -name '*.pyc' -delete && \
-    find /opt/venv -type f -name '*.pyo' -delete && \
-    find /opt/venv -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+    pip install --no-cache-dir ".[solveit]"
 
-RUN apk del .build-deps
-
-# Clone SOLVE-IT data for release/monthly modes.
+# Clone SOLVE-IT data while git and pip are still available.
 # SHA checkout: reproducible (monthly/latest). Tag checkout: pinned release.
-# Live mode: empty directory — entrypoint fills it at runtime.
+# Live mode: no bundled data — entrypoint fetches or uses a mounted volume.
+# The solveit runtime deps (pybtex, rdflib, etc.) are already installed above
+# via .[solveit]; no secondary pip install needed from requirements.txt.
 RUN if [ "$SOLVE_IT_MODE" != "live" ]; then \
       git clone https://github.com/SOLVE-IT-DF/solve-it.git /tmp/solve-it-main; \
       if [ -n "$SOLVEIT_SHA" ]; then \
@@ -51,11 +47,16 @@ RUN if [ "$SOLVE_IT_MODE" != "live" ]; then \
         git -C /tmp/solve-it-main checkout "$SOLVE_IT_VERSION"; \
       fi; \
       rm -rf /tmp/solve-it-main/.git; \
-      grep -v pytest /tmp/solve-it-main/requirements.txt \
-        | pip install --no-cache-dir -r /dev/stdin; \
     else \
       mkdir -p /tmp/solve-it-main; \
     fi
+
+# Remove pip/setuptools/wheel and clean up after all installs are done.
+RUN pip uninstall -y pip setuptools wheel 2>/dev/null || true && \
+    find /opt/venv -type f -name '*.pyc' -delete && \
+    find /opt/venv -type f -name '*.pyo' -delete && \
+    find /opt/venv -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true && \
+    apk del .build-deps
 
 # ============================================================================
 # Stage 2: Runtime
@@ -114,13 +115,14 @@ ENV PYTHONPATH=/app/src \
     MCP_TRANSPORT=http \
     HTTP_HOST=0.0.0.0 \
     HTTP_PORT=8000 \
+    MCP_PORT=8000 \
     MCP_OTEL_ENABLED=false \
     LOG_LEVEL=INFO \
     TMPDIR=/tmp/app-tmp \
     SOLVE_IT_MODE=${SOLVE_IT_MODE} \
     FORENSIC_METADATA=${FORENSIC_METADATA} \
     SOLVE_IT_VERSION=${SOLVE_IT_VERSION} \
-    MCP_APP_SOLVEIT_DATA_PATH=/app/solve-it-main/data \
+    MCP_APP_SOLVEIT_DATA_PATH=/app/solve-it-main \
     SOLVE_IT_DATA_URL=https://data.solveit-df.org/solve-it-latest.zip \
     SOLVE_IT_DATA_DIR=/tmp/app-cache/solve-it
 

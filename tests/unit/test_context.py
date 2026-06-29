@@ -228,3 +228,39 @@ class TestMcpNotifications:
         ctx = _make_context(session=mock_session)
         # Must not raise even though send_log_message fails
         await ctx.log_info("this should still work")
+
+
+class TestFssAuthToken:
+    """Tests for fss_auth_token context variable (Bearer token propagation)."""
+
+    def test_fss_auth_token_default_is_empty(self) -> None:
+        from mcp_chassis.utils.fss_context import fss_auth_token
+        assert fss_auth_token.get() == ""
+
+    def test_fss_auth_token_set_and_get(self) -> None:
+        from mcp_chassis.utils.fss_context import fss_auth_token
+        token = fss_auth_token.set("my-bearer-token")
+        try:
+            assert fss_auth_token.get() == "my-bearer-token"
+        finally:
+            fss_auth_token.reset(token)
+
+    def test_fss_auth_token_reset_restores_default(self) -> None:
+        from mcp_chassis.utils.fss_context import fss_auth_token
+        token = fss_auth_token.set("temp-token")
+        fss_auth_token.reset(token)
+        assert fss_auth_token.get() == ""
+
+    def test_fss_auth_token_is_in_all_vars(self) -> None:
+        from mcp_chassis.utils.fss_context import _ALL_VARS, fss_auth_token
+        assert fss_auth_token in _ALL_VARS
+
+    def test_fss_auth_token_in_request_context(self) -> None:
+        """Simulate server.py reading fss_auth_token into request_context."""
+        from mcp_chassis.utils.fss_context import fss_auth_token
+        token = fss_auth_token.set("test-secret")
+        try:
+            request_context = {"token": fss_auth_token.get()}
+            assert request_context["token"] == "test-secret"
+        finally:
+            fss_auth_token.reset(token)

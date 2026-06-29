@@ -292,6 +292,9 @@ def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
     - MCP_LOG_LEVEL → server.log_level
     - MCP_SECURITY_PROFILE → security.profile
     - MCP_AUTH_TOKEN → security.auth.token
+    - MCP_AUTH_ENABLED → security.auth.enabled
+    - MCP_AUTH_PROVIDER → security.auth.provider
+    - MCP_DETAILED_ERRORS → security.detailed_errors
     - MCP_RATE_LIMIT_ENABLED → security.rate_limits.enabled
 
     Args:
@@ -310,6 +313,16 @@ def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
 
     if val := os.environ.get("MCP_AUTH_TOKEN"):
         result.setdefault("security", {}).setdefault("auth", {})["token"] = val
+
+    if val := os.environ.get("MCP_AUTH_ENABLED"):
+        enabled = val.lower() in ("1", "true", "yes")
+        result.setdefault("security", {}).setdefault("auth", {})["enabled"] = enabled
+
+    if val := os.environ.get("MCP_AUTH_PROVIDER"):
+        result.setdefault("security", {}).setdefault("auth", {})["provider"] = val
+
+    if val := os.environ.get("MCP_DETAILED_ERRORS"):
+        result.setdefault("security", {})["detailed_errors"] = val.lower() in ("1", "true", "yes")
 
     if val := os.environ.get("MCP_RATE_LIMIT_ENABLED"):
         enabled = val.lower() in ("1", "true", "yes")

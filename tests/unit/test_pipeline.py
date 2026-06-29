@@ -497,8 +497,14 @@ class TestReplayPrevention:
     """Tests for X-Request-Timestamp replay prevention (FSS-0003 §7.3)."""
 
     def _make_pipeline(self, window_seconds: int = 300) -> "MiddlewarePipeline":
-        from mcp_chassis.config import SecurityConfig, RateLimitConfig, IOLimitConfig
-        from mcp_chassis.config import ValidationConfig, SanitizationConfig, AuthConfig
+        from mcp_chassis.config import (
+            AuthConfig,
+            IOLimitConfig,
+            RateLimitConfig,
+            SanitizationConfig,
+            SecurityConfig,
+            ValidationConfig,
+        )
         config = SecurityConfig(
             rate_limits=RateLimitConfig(enabled=False),
             io_limits=IOLimitConfig(max_request_size=1_048_576, max_response_size=5_242_880),

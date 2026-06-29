@@ -33,18 +33,10 @@ except ImportError:
 
 # Optional: cryptography for Ed25519 signing (FSS-0005 §6, required for L3)
 try:
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-        Ed25519PrivateKey,
-        Ed25519PublicKey,
-    )
-    from cryptography.hazmat.primitives.serialization import (
-        Encoding,
-        NoEncryption,
-        PrivateFormat,
-        PublicFormat,
-        load_pem_private_key,
-    )
     import base64
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key
     _CRYPTO_AVAILABLE = True
 except ImportError:
     Ed25519PrivateKey = None  # type: ignore[assignment, misc]

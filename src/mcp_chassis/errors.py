@@ -11,7 +11,6 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-
 # ── FSS error taxonomy (FSS-0002 §6.3) ────────────────────────────────
 
 FSS_AUTH_REQUIRED = "FSS_AUTH_REQUIRED"

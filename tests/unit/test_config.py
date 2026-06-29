@@ -172,6 +172,72 @@ class TestEnvVarOverrides:
         finally:
             del os.environ["MCP_RATE_LIMIT_ENABLED"]
 
+    def test_auth_enabled_override(self, tmp_path: Path) -> None:
+        toml_content = b"[security.auth]\nenabled = false\n"
+        config_file = tmp_path / "c.toml"
+        config_file.write_bytes(toml_content)
+        os.environ["MCP_AUTH_ENABLED"] = "true"
+        try:
+            config = ServerConfig.load(config_file)
+            assert config.security.auth.enabled is True
+        finally:
+            del os.environ["MCP_AUTH_ENABLED"]
+
+    def test_auth_enabled_false_override(self, tmp_path: Path) -> None:
+        toml_content = b"[security.auth]\nenabled = true\n"
+        config_file = tmp_path / "c.toml"
+        config_file.write_bytes(toml_content)
+        os.environ["MCP_AUTH_ENABLED"] = "false"
+        try:
+            config = ServerConfig.load(config_file)
+            assert config.security.auth.enabled is False
+        finally:
+            del os.environ["MCP_AUTH_ENABLED"]
+
+    def test_auth_provider_override(self, tmp_path: Path) -> None:
+        toml_content = b"[security.auth]\nprovider = 'none'\n"
+        config_file = tmp_path / "c.toml"
+        config_file.write_bytes(toml_content)
+        os.environ["MCP_AUTH_PROVIDER"] = "token"
+        try:
+            config = ServerConfig.load(config_file)
+            assert config.security.auth.provider == "token"
+        finally:
+            del os.environ["MCP_AUTH_PROVIDER"]
+
+    def test_detailed_errors_enabled_override(self, tmp_path: Path) -> None:
+        toml_content = b"[security]\ndetailed_errors = false\n"
+        config_file = tmp_path / "c.toml"
+        config_file.write_bytes(toml_content)
+        os.environ["MCP_DETAILED_ERRORS"] = "true"
+        try:
+            config = ServerConfig.load(config_file)
+            assert config.security.detailed_errors is True
+        finally:
+            del os.environ["MCP_DETAILED_ERRORS"]
+
+    def test_detailed_errors_disabled_override(self, tmp_path: Path) -> None:
+        toml_content = b"[security]\ndetailed_errors = true\n"
+        config_file = tmp_path / "c.toml"
+        config_file.write_bytes(toml_content)
+        os.environ["MCP_DETAILED_ERRORS"] = "false"
+        try:
+            config = ServerConfig.load(config_file)
+            assert config.security.detailed_errors is False
+        finally:
+            del os.environ["MCP_DETAILED_ERRORS"]
+
+    def test_auth_mode_override(self, tmp_path: Path) -> None:
+        toml_content = b"[security.auth]\nmode = 'none'\n"
+        config_file = tmp_path / "c.toml"
+        config_file.write_bytes(toml_content)
+        os.environ["MCP_AUTH_MODE"] = "apikey"
+        try:
+            config = ServerConfig.load(config_file)
+            assert config.security.auth.mode == "apikey"
+        finally:
+            del os.environ["MCP_AUTH_MODE"]
+
     def test_template_config_env_var(self, tmp_path: Path) -> None:
         toml_content = b"[server]\nname = 'env-configured-server'\n"
         config_file = tmp_path / "c.toml"

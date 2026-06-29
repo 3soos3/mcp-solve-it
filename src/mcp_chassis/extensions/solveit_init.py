@@ -91,7 +91,7 @@ class SolveItAppConfig:
             objective_mapping=raw.get("objective_mapping", cls.objective_mapping),
             enable_extensions=raw.get("enable_extensions", cls.enable_extensions),
             init_required=raw.get("init_required", cls.init_required),
-            enable_full_detail_tools=raw.get("enable_full_detail_tools", cls.enable_full_detail_tools),
+            enable_full_detail_tools=raw.get("enable_full_detail_tools", cls.enable_full_detail_tools),  # noqa: E501
             search=search,
         )
 

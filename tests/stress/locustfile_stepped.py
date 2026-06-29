@@ -50,8 +50,9 @@ def on_init(environment: Environment, **kwargs):
 
 
 def _step_loop(environment: Environment):
-    import gevent
     import time
+
+    import gevent
 
     global _step_index, _step_start
     _step_start = time.monotonic()
