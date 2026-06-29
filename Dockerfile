@@ -22,9 +22,7 @@ RUN apk add --no-cache --virtual .build-deps \
     build-base \
     libffi-dev \
     openssl-dev \
-    git \
-    cargo \
-    rust
+    git
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
