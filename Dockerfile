@@ -51,6 +51,8 @@ RUN if [ "$SOLVE_IT_MODE" != "live" ]; then \
         git -C /tmp/solve-it-main checkout "$SOLVE_IT_VERSION"; \
       fi; \
       rm -rf /tmp/solve-it-main/.git; \
+      grep -v pytest /tmp/solve-it-main/requirements.txt \
+        | pip install --no-cache-dir -r /dev/stdin; \
     else \
       mkdir -p /tmp/solve-it-main; \
     fi
