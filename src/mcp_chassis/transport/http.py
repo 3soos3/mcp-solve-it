@@ -23,10 +23,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Header names for FSS context propagation (wired to context vars in Level 1 work)
+# FSS investigation context headers (FSS-0002 §4.2–4.3)
 _HEADER_INVESTIGATION_ID = "x-investigation-id"
 _HEADER_ANALYST_IDENTITY = "x-analyst-identity"
 _HEADER_AGENT_IDENTITY = "x-agent-identity"
+# Replay prevention header (FSS-0003 §7.3)
+_HEADER_REQUEST_TIMESTAMP = "x-request-timestamp"
 
 _DEFAULT_HOST = "0.0.0.0"
 _DEFAULT_PORT = 8080
@@ -194,21 +196,37 @@ class HTTPTransport(TransportBase):
             logger.info("MCP HTTP session manager stopped")
 
         async def _extract_fss_headers(request: Request) -> None:
-            """Extract FSS context headers and store in request state.
-
-            The values are logged and attached to request.state for future
-            wiring to context variables (Level 1 work).
+            """Extract FSS context headers, set context vars, store in request state.
 
             Args:
                 request: The incoming Starlette request.
             """
+            from mcp_chassis.utils.fss_context import (
+                fss_investigation_id,
+                fss_analyst_identity,
+                fss_agent_identity,
+                fss_request_timestamp,
+            )
+
             investigation_id = request.headers.get(_HEADER_INVESTIGATION_ID)
             analyst_identity = request.headers.get(_HEADER_ANALYST_IDENTITY)
             agent_identity = request.headers.get(_HEADER_AGENT_IDENTITY)
+            request_timestamp = request.headers.get(_HEADER_REQUEST_TIMESTAMP)
+
+            # Set FSS context vars so _dispatch_tool and middleware can read them
+            if investigation_id:
+                fss_investigation_id.set(investigation_id)
+            if analyst_identity:
+                fss_analyst_identity.set(analyst_identity)
+            if agent_identity:
+                fss_agent_identity.set(agent_identity)
+            if request_timestamp:
+                fss_request_timestamp.set(request_timestamp)
 
             request.state.investigation_id = investigation_id
             request.state.analyst_identity = analyst_identity
             request.state.agent_identity = agent_identity
+            request.state.request_timestamp = request_timestamp
 
             if investigation_id or analyst_identity or agent_identity:
                 logger.debug(
@@ -258,13 +276,31 @@ class HTTPTransport(TransportBase):
                 receive: ASGI receive callable.
                 send: ASGI send callable.
             """
-            # Extract FSS headers from scope headers before forwarding
+            # Extract FSS headers from ASGI scope and set context vars
             if isinstance(scope, dict):
+                from mcp_chassis.utils.fss_context import (
+                    fss_investigation_id,
+                    fss_analyst_identity,
+                    fss_agent_identity,
+                    fss_request_timestamp,
+                )
+
                 raw_headers: list[tuple[bytes, bytes]] = scope.get("headers", [])
                 headers_dict = {k.lower(): v.decode("latin-1") for k, v in raw_headers}
                 investigation_id = headers_dict.get(_HEADER_INVESTIGATION_ID)
                 analyst_identity = headers_dict.get(_HEADER_ANALYST_IDENTITY)
                 agent_identity = headers_dict.get(_HEADER_AGENT_IDENTITY)
+                request_timestamp = headers_dict.get(_HEADER_REQUEST_TIMESTAMP)
+
+                if investigation_id:
+                    fss_investigation_id.set(investigation_id)
+                if analyst_identity:
+                    fss_analyst_identity.set(analyst_identity)
+                if agent_identity:
+                    fss_agent_identity.set(agent_identity)
+                if request_timestamp:
+                    fss_request_timestamp.set(request_timestamp)
+
                 if investigation_id or analyst_identity or agent_identity:
                     logger.debug(
                         "FSS headers on MCP request: investigation_id=%s "
@@ -273,11 +309,11 @@ class HTTPTransport(TransportBase):
                         analyst_identity,
                         agent_identity,
                     )
-                # Store in scope state for future middleware wiring
                 scope.setdefault("state", {})  # type: ignore[union-attr]
                 scope["state"]["investigation_id"] = investigation_id  # type: ignore[index]
                 scope["state"]["analyst_identity"] = analyst_identity  # type: ignore[index]
                 scope["state"]["agent_identity"] = agent_identity  # type: ignore[index]
+                scope["state"]["request_timestamp"] = request_timestamp  # type: ignore[index]
 
             await session_manager.handle_request(scope, receive, send)
 
