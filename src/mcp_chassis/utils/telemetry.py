@@ -43,18 +43,18 @@ class TelemetryManager:
         environment = os.environ.get("MCP_OTEL_ENVIRONMENT", "production")
 
         try:
-            from opentelemetry import trace, metrics
-            from opentelemetry.sdk.trace import TracerProvider
-            from opentelemetry.sdk.trace.export import BatchSpanProcessor
-            from opentelemetry.sdk.metrics import MeterProvider
-            from opentelemetry.sdk.resources import Resource
-            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-                OTLPSpanExporter,
-            )
+            from opentelemetry import metrics, trace
             from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
                 OTLPMetricExporter,
             )
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+                OTLPSpanExporter,
+            )
+            from opentelemetry.sdk.metrics import MeterProvider
             from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+            from opentelemetry.sdk.resources import Resource
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
             resource = Resource.create({
                 "service.name": service_name,
@@ -109,7 +109,7 @@ class TelemetryManager:
         if not self.enabled:
             return
         try:
-            from opentelemetry import trace, metrics
+            from opentelemetry import metrics, trace
             tp = trace.get_tracer_provider()
             if hasattr(tp, "shutdown"):
                 tp.shutdown()
@@ -124,7 +124,7 @@ class TelemetryManager:
 class _NoOpSpan:
     """No-op context manager returned when telemetry is disabled."""
 
-    def __enter__(self) -> "_NoOpSpan":
+    def __enter__(self) -> _NoOpSpan:
         return self
 
     def __exit__(self, *args: Any) -> None:

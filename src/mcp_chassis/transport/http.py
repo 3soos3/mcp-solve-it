@@ -10,10 +10,10 @@ Requires optional dependencies:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 from collections.abc import AsyncIterator
-import contextlib
 from typing import TYPE_CHECKING
 
 from mcp_chassis.transport.base import TransportBase
@@ -99,7 +99,7 @@ class HTTPTransport(TransportBase):
         self._port_override = port
         self._base_path = base_path
         self._stateless = stateless
-        self._uvicorn_server: object | None = None  # uvicorn.Server, typed as object to avoid import
+        self._uvicorn_server: object | None = None  # uvicorn.Server, typed as object to avoid import  # noqa: E501
 
     def _resolve_host(self, server: ChassisServer) -> str:
         """Resolve the bind address in priority order.
@@ -138,7 +138,7 @@ class HTTPTransport(TransportBase):
             try:
                 return int(env_port)
             except ValueError:
-                logger.warning("Invalid MCP_PORT value '%s', using default %d", env_port, _DEFAULT_PORT)
+                logger.warning("Invalid MCP_PORT value '%s', using default %d", env_port, _DEFAULT_PORT)  # noqa: E501
         return _DEFAULT_PORT
 
     def _resolve_cors_origins(self) -> list[str]:
@@ -202,9 +202,9 @@ class HTTPTransport(TransportBase):
                 request: The incoming Starlette request.
             """
             from mcp_chassis.utils.fss_context import (
-                fss_investigation_id,
-                fss_analyst_identity,
                 fss_agent_identity,
+                fss_analyst_identity,
+                fss_investigation_id,
                 fss_request_timestamp,
             )
 
@@ -279,9 +279,9 @@ class HTTPTransport(TransportBase):
             # Extract FSS headers from ASGI scope and set context vars
             if isinstance(scope, dict):
                 from mcp_chassis.utils.fss_context import (
-                    fss_investigation_id,
-                    fss_analyst_identity,
                     fss_agent_identity,
+                    fss_analyst_identity,
+                    fss_investigation_id,
                     fss_request_timestamp,
                 )
 
@@ -301,6 +301,12 @@ class HTTPTransport(TransportBase):
                 if request_timestamp:
                     fss_request_timestamp.set(request_timestamp)
 
+                # Extract bearer token for auth middleware
+                from mcp_chassis.utils.fss_context import fss_auth_token
+                auth_header = headers_dict.get("authorization", "")
+                if auth_header.lower().startswith("bearer "):
+                    fss_auth_token.set(auth_header[7:].strip())
+
                 if investigation_id or analyst_identity or agent_identity:
                     logger.debug(
                         "FSS headers on MCP request: investigation_id=%s "
@@ -317,6 +323,21 @@ class HTTPTransport(TransportBase):
 
             await session_manager.handle_request(scope, receive, send)
 
+        from starlette.middleware.base import BaseHTTPMiddleware
+        from starlette.responses import Response as StarletteResponse
+
+        class _BearerTokenMiddleware(BaseHTTPMiddleware):
+            """Extract Authorization: Bearer <token> and store in fss_auth_token."""
+
+            async def dispatch(
+                self, request: Request, call_next: object
+            ) -> StarletteResponse:
+                from mcp_chassis.utils.fss_context import fss_auth_token
+                auth = request.headers.get("authorization", "")
+                if auth.lower().startswith("bearer "):
+                    fss_auth_token.set(auth[7:].strip())
+                return await call_next(request)  # type: ignore[call-arg]
+
         middleware = [
             Middleware(
                 CORSMiddleware,
@@ -324,7 +345,8 @@ class HTTPTransport(TransportBase):
                 allow_methods=["GET", "POST", "OPTIONS"],
                 allow_headers=["*"],
                 expose_headers=["*"],
-            )
+            ),
+            Middleware(_BearerTokenMiddleware),
         ]
 
         app = Starlette(
@@ -369,7 +391,7 @@ class HTTPTransport(TransportBase):
         # Compatibility: honour MCP_TRANSPORT env var if set, but we are already
         # in the HTTP transport so just log it rather than re-routing.
         mcp_transport_env = os.environ.get("MCP_TRANSPORT")
-        if mcp_transport_env and mcp_transport_env.lower() not in ("http", "streamable-http", "sse"):
+        if mcp_transport_env and mcp_transport_env.lower() not in ("http", "streamable-http", "sse"):  # noqa: E501
             logger.warning(
                 "MCP_TRANSPORT env var is '%s' but HTTP transport was explicitly selected; "
                 "proceeding with HTTP.",

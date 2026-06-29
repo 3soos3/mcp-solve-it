@@ -50,7 +50,7 @@ def build_provenance_record(
     import os
     result_status = fss_result_status.get() or "error"  # pessimistic default
     forensic_metadata = os.environ.get("FORENSIC_METADATA", "false").lower() == "true"
-    evidentiary = "evidentiary" if (result_status == "success" and forensic_metadata) else "non-evidentiary"
+    evidentiary = "evidentiary" if (result_status == "success" and forensic_metadata) else "non-evidentiary"  # noqa: E501
 
     record: dict[str, Any] = {
         "transaction_id":     fss_transaction_id.get(),
@@ -61,7 +61,7 @@ def build_provenance_record(
         "parameters_cai":     fss_parameters_cai.get(),
         "artifact_id":        fss_result_cai.get(),    # same value as result_cai
         "result_cai":         fss_result_cai.get(),
-        "timestamp_utc":      datetime.now(UTC).isoformat(),
+        "timestamp_utc":      datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
         "result_status":      result_status,
         "evidentiary_status": evidentiary,
         "client_identity":    fss_client_identity.get(),

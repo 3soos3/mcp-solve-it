@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import os
 import pathlib
 
 import pytest
@@ -172,7 +170,9 @@ class TestEd25519Signing:
 
     def test_sign_verify_round_trip(self, signing_key: object) -> None:
         import base64
+
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
         from mcp_chassis.utils.integrity import sign_provenance
 
         assert isinstance(signing_key, Ed25519PrivateKey)
@@ -214,8 +214,11 @@ class TestEd25519Signing:
         pytest.importorskip("cryptography")
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         from cryptography.hazmat.primitives.serialization import (
-            Encoding, NoEncryption, PrivateFormat
+            Encoding,
+            NoEncryption,
+            PrivateFormat,
         )
+
         from mcp_chassis.utils.integrity import load_signing_key, sign_provenance
 
         key = Ed25519PrivateKey.generate()

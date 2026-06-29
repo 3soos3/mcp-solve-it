@@ -54,6 +54,12 @@ fss_request_timestamp: contextvars.ContextVar[str | None] = contextvars.ContextV
     "fss_request_timestamp", default=None
 )
 
+# Bearer token extracted from Authorization header (HTTP transport only)
+# Consumed by the auth middleware via request_context["token"].
+fss_auth_token: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "fss_auth_token", default=""
+)
+
 # Internal: Token list for resetting all vars after each dispatch
 _ALL_VARS: tuple[contextvars.ContextVar[Any], ...] = (
     fss_transaction_id,
@@ -65,6 +71,7 @@ _ALL_VARS: tuple[contextvars.ContextVar[Any], ...] = (
     fss_agent_identity,
     fss_client_identity,
     fss_request_timestamp,
+    fss_auth_token,
 )
 
 
@@ -84,6 +91,7 @@ def reset_fss_context(tokens: list[contextvars.Token[Any]]) -> None:
 __all__ = [
     "fss_agent_identity",
     "fss_analyst_identity",
+    "fss_auth_token",
     "fss_client_identity",
     "fss_investigation_id",
     "fss_parameters_cai",

@@ -16,6 +16,15 @@ dependencies = [
 mcp-chassis = "mcp_chassis.__main__:main"
 
 [project.optional-dependencies]
+# Runtime deps for the solve_it_library (always needed when KB is loaded,
+# whether data is baked in or mounted at runtime via a volume).
+solveit = [
+    "pybtex",
+    "xlsxwriter",
+    "rdflib>=7.0.0",
+    "pyyaml",
+    "pydantic>=2.0.0",
+]
 http = [
     "starlette>=0.37.0",
     "uvicorn[standard]>=0.27.0",
@@ -47,6 +56,14 @@ packages = ["src/mcp_chassis"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+markers = [
+    "network: requires live network access to SOLVE_IT_DATA_URL (deselect with -m 'not network')",
+    "slow: test spawns multiple containers or is otherwise slow",
+    "auth: authentication and token behaviour tests",
+    "crypto: cryptographic hash verification tests",
+    "kat: Known-Answer Tests against real SOLVE-IT data (require SOLVE_IT_DATA_PATH)",
+    "integration: integration tests that require external data or a running server",
+]
 
 [tool.mypy]
 python_version = "3.11"

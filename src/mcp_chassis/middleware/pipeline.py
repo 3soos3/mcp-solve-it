@@ -16,10 +16,10 @@ from typing import Any
 from mcp_chassis.config import SecurityConfig
 from mcp_chassis.errors import (
     AuthError,
+    ChassisError,
     IOLimitError,
     RateLimitError,
     SanitizationError,
-    ChassisError,
     ValidationError,
 )
 from mcp_chassis.security.auth import AuthProvider, create_auth_provider

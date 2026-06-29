@@ -219,9 +219,12 @@ class TestSignatureField:
     ) -> None:
         pytest.importorskip("cryptography", reason="cryptography not installed")
         import pathlib
+
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         from cryptography.hazmat.primitives.serialization import (
-            Encoding, NoEncryption, PrivateFormat
+            Encoding,
+            NoEncryption,
+            PrivateFormat,
         )
 
         key = Ed25519PrivateKey.generate()

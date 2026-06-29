@@ -297,6 +297,7 @@ class OAuthJWTProvider(AuthProvider):
 
     async def _get_jwks(self) -> dict[str, Any]:
         import time
+
         import httpx
 
         now = time.monotonic()
@@ -328,7 +329,7 @@ class OAuthJWTProvider(AuthProvider):
             return AuthResult.failure("Server misconfiguration: PyJWT not installed")
 
         try:
-            jwks = await self._get_jwks()
+            jwks = await self._get_jwks()  # noqa: F841
             # Use PyJWT's PyJWKClient for JWKS-based key selection
             from jwt import PyJWKClient  # type: ignore[import-untyped]
             jwk_client = PyJWKClient(self._jwks_url)

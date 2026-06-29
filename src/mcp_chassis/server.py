@@ -19,27 +19,25 @@ from mcp.server.lowlevel.server import request_ctx
 from mcp_chassis.config import ServerConfig
 from mcp_chassis.context import HandlerContext
 from mcp_chassis.errors import (
-    ChassisError,
-    ExtensionError,
-    FSSError,
-    FSS_DATASET_UNAVAILABLE,
     FSS_EXECUTION_FAILED,
     FSS_EXECUTION_INTERRUPTED,
     FSS_INTERNAL_ERROR,
     FSS_PARAM_INVALID,
     FSS_TOOL_UNAVAILABLE,
+    ChassisError,
+    ExtensionError,
+    FSSError,
 )
 from mcp_chassis.middleware.pipeline import MiddlewarePipeline
 from mcp_chassis.utils.fss_context import (
-    fss_transaction_id,
+    fss_agent_identity,
+    fss_analyst_identity,
+    fss_client_identity,
+    fss_investigation_id,
     fss_parameters_cai,
     fss_result_cai,
     fss_result_status,
-    fss_investigation_id,
-    fss_analyst_identity,
-    fss_agent_identity,
-    fss_client_identity,
-    reset_fss_context,
+    fss_transaction_id,
 )
 from mcp_chassis.utils.integrity import compute_json_cai
 from mcp_chassis.utils.provenance import build_provenance_record
@@ -496,7 +494,7 @@ class ChassisServer:
     ) -> types.CallToolResult:
         """Inner dispatch — FSS lifecycle, middleware, handler invocation."""
         # ── 1. Initialise FSS transaction context ─────────────────────
-        tokens: list[Any] = []  # kept for compatibility; context cleared in finally
+        tokens: list[Any] = []  # noqa: F841  kept for compatibility; context cleared in finally
         transaction_id = str(uuid.uuid4())
         fss_transaction_id.set(transaction_id)
         fss_result_status.set("error")  # pessimistic default
@@ -564,8 +562,10 @@ class ChassisServer:
             logger.warning("parameters_cai computation failed: %s", exc)
 
         # ── 4. Middleware pipeline ─────────────────────────────────────
+        from mcp_chassis.utils.fss_context import fss_auth_token
         request_context: dict[str, Any] = {
             "client_identity": fss_client_identity.get(),
+            "token": fss_auth_token.get(),  # bearer token from HTTP Authorization header
         }
 
         middleware_result = await self._middleware.process_tool_request(

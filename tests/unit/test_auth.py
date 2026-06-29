@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+
 import pytest
 
 from mcp_chassis.errors import AuthError

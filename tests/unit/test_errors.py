@@ -3,11 +3,11 @@
 
 from mcp_chassis.errors import (
     AuthError,
+    ChassisError,
     ExtensionError,
     IOLimitError,
     RateLimitError,
     SanitizationError,
-    ChassisError,
     ValidationError,
 )
 

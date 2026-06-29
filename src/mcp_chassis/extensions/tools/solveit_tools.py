@@ -198,6 +198,12 @@ _BATCH_TOOLS: list[dict[str, Any]] = [
         "param_description": "The weakness ID (e.g. DFW-1001).",
         "param_schema": {"type": "string", "minLength": 1},
         "not_found_check": True,
+        "known_limitations": (
+            "Coverage is limited to weaknesses documented in the active SOLVE-IT KB "
+            "version. ASTM error category assignments reflect the KB author's "
+            "classification and may not cover all interpretations. Weaknesses "
+            "specific to highly specialised tools or jurisdictions may be absent."
+        ),
     },
     {
         "name": "solveit_get_mitigation",
@@ -213,6 +219,13 @@ _BATCH_TOOLS: list[dict[str, Any]] = [
         "param_description": "The mitigation ID (e.g. DFM-1001).",
         "param_schema": {"type": "string", "minLength": 1},
         "not_found_check": True,
+        "known_limitations": (
+            "Coverage is limited to mitigations documented in the active KB. "
+            "The effectiveness of a mitigation in practice depends on the specific "
+            "case context, available tools, and jurisdiction. Absence of a mitigation "
+            "entry does not mean no remedy exists — it may simply not yet be "
+            "documented in the KB."
+        ),
     },
     {
         "name": "solveit_list_techniques",
@@ -223,6 +236,12 @@ _BATCH_TOOLS: list[dict[str, Any]] = [
             "keywords — this returns everything."
         ),
         "method": "get_all_techniques_with_name_and_id",
+        "known_limitations": (
+            "Returns only IDs and names — no descriptions, weaknesses, or "
+            "references. Call solveit_get_technique for full detail on a specific "
+            "entry. The list reflects the KB snapshot loaded at server startup; "
+            "newly added techniques require a server restart to appear."
+        ),
     },
     {
         "name": "solveit_list_weaknesses",
@@ -233,6 +252,11 @@ _BATCH_TOOLS: list[dict[str, Any]] = [
             "keywords — this returns everything."
         ),
         "method": "get_all_weaknesses_with_name_and_id",
+        "known_limitations": (
+            "Returns only IDs and names. Call solveit_get_weakness for full "
+            "detail. The ASTM error category is not included in this listing. "
+            "The list reflects the KB at startup time."
+        ),
     },
     {
         "name": "solveit_list_mitigations",
@@ -243,6 +267,11 @@ _BATCH_TOOLS: list[dict[str, Any]] = [
             "have keywords — this returns everything."
         ),
         "method": "get_all_mitigations_with_name_and_id",
+        "known_limitations": (
+            "Returns only IDs and names. Call solveit_get_mitigation for full "
+            "detail including which weaknesses the mitigation addresses. "
+            "The list reflects the KB at startup time."
+        ),
     },
     {
         "name": "solveit_list_objectives",
@@ -256,6 +285,13 @@ _BATCH_TOOLS: list[dict[str, Any]] = [
             "to switch between frameworks (solve-it, carrier, dfrws)."
         ),
         "method": "list_objectives",
+        "known_limitations": (
+            "Results depend on the currently loaded objective mapping file. "
+            "Different mappings (solve-it.json, carrier.json, dfrws.json) "
+            "organise the same techniques into different phases with different "
+            "objective names. Call solveit_list_available_mappings to see all "
+            "available frameworks."
+        ),
     },
     {
         "name": "solveit_get_techniques_for_objective",
@@ -273,6 +309,12 @@ _BATCH_TOOLS: list[dict[str, Any]] = [
         "param": "objective_name",
         "param_description": "The objective name (e.g. 'Acquire data').",
         "param_schema": {"type": "string", "minLength": 1},
+        "known_limitations": (
+            "Objective names are case-sensitive and must exactly match those "
+            "returned by solveit_list_objectives. Results vary between mapping "
+            "files — the same technique may belong to different objectives in "
+            "different frameworks."
+        ),
     },
 ]
 
@@ -294,6 +336,12 @@ _RELATIONSHIP_TOOLS: list[dict[str, Any]] = [
         "relation_method": "get_weaknesses_for_technique",
         "param_name": "technique_id",
         "param_description": "The technique ID (e.g. DFT-1001).",
+        "known_limitations": (
+            "Only weaknesses explicitly documented in the KB for this technique "
+            "are returned. Context-specific weaknesses that are not yet captured "
+            "in the KB will not appear. An empty list means no weaknesses are "
+            "currently documented, not that none exist."
+        ),
     },
     {
         "tool_name": "solveit_get_mitigations_for_weakness",
@@ -309,6 +357,12 @@ _RELATIONSHIP_TOOLS: list[dict[str, Any]] = [
         "relation_method": "get_mitigations_for_weakness",
         "param_name": "weakness_id",
         "param_description": "The weakness ID (e.g. DFW-1001).",
+        "known_limitations": (
+            "An empty list means no mitigations are currently documented for this "
+            "weakness in the KB, not that the weakness is unaddressable. "
+            "Effectiveness of any listed mitigation depends on the specific case, "
+            "available tools, and legal context."
+        ),
     },
     {
         "tool_name": "solveit_get_techniques_for_weakness",
@@ -324,6 +378,11 @@ _RELATIONSHIP_TOOLS: list[dict[str, Any]] = [
         "relation_method": "get_techniques_for_weakness",
         "param_name": "weakness_id",
         "param_description": "The weakness ID (e.g. DFW-1001).",
+        "known_limitations": (
+            "Only techniques with explicit technique→weakness links in the KB are "
+            "returned. A weakness may apply to additional techniques that have not "
+            "yet had this association documented."
+        ),
     },
     {
         "tool_name": "solveit_get_weaknesses_for_mitigation",
@@ -338,6 +397,12 @@ _RELATIONSHIP_TOOLS: list[dict[str, Any]] = [
         "relation_method": "get_weaknesses_for_mitigation",
         "param_name": "mitigation_id",
         "param_description": "The mitigation ID (e.g. DFM-1001).",
+        "known_limitations": (
+            "Derived from weakness→mitigation links in the KB. A mitigation may "
+            "address weaknesses not yet listed if those associations have not been "
+            "documented. Does not imply the mitigation is complete or sufficient "
+            "for all listed weaknesses."
+        ),
     },
     {
         "tool_name": "solveit_get_techniques_for_mitigation",
@@ -353,6 +418,11 @@ _RELATIONSHIP_TOOLS: list[dict[str, Any]] = [
         "relation_method": "get_techniques_for_mitigation",
         "param_name": "mitigation_id",
         "param_description": "The mitigation ID (e.g. DFM-1001).",
+        "known_limitations": (
+            "Derived via weakness intermediaries: technique→weakness→mitigation. "
+            "Techniques whose weaknesses are not yet linked to this mitigation in "
+            "the KB will be absent even if the mitigation logically applies to them."
+        ),
     },
 ]
 
@@ -396,6 +466,7 @@ def _register_relationship_tools(server: ChassisServer, kb: Any) -> None:
                 "required": [param_name],
             },
             handler=_handle,
+            known_limitations=defn.get("known_limitations", ""),
         )
 
 
@@ -431,6 +502,12 @@ def _register_mitigations_for_technique_tool(
             "Shortcut for the technique → weaknesses → mitigations traversal. "
             "Use this when you want to know how to address limitations of a "
             "technique without needing to inspect individual weaknesses first."
+        ),
+        known_limitations=(
+            "Traverses technique→weakness→mitigation links. A technique with "
+            "no documented weaknesses will return an empty list. Ordering of "
+            "mitigations is not guaranteed. Mitigations are returned as IDs "
+            "only — call solveit_get_mitigation for full details."
         ),
         input_schema={
             "type": "object",
@@ -480,6 +557,13 @@ def _register_objectives_and_mapping_tools(
             "Reverse direction: complements "
             "solveit_get_techniques_for_objective (forward direction)."
         ),
+        known_limitations=(
+            "Results depend on the currently loaded objective mapping. "
+            "Subtechniques return the parent's objectives, so the ID in the "
+            "result may differ from the requested ID. If the technique is not "
+            "assigned to any objective in the active mapping, an empty list is "
+            "returned."
+        ),
         input_schema={
             "type": "object",
             "properties": {
@@ -514,6 +598,11 @@ def _register_objectives_and_mapping_tools(
             "framework), carrier.json (carrier/network context), dfrws.json "
             "(DFRWS framework). "
             "Use solveit_load_objective_mapping to switch between them."
+        ),
+        known_limitations=(
+            "Lists only mapping files present in the SOLVE-IT data directory at "
+            "server startup. Custom or third-party mapping files must be placed "
+            "in the data directory and the server restarted before they appear here."
         ),
         input_schema={"type": "object", "properties": {}},
         handler=_handle_list_mappings,
@@ -552,6 +641,14 @@ def _register_objectives_and_mapping_tools(
             "framework. "
             "Use this when the user asks about techniques in the context of a "
             "specific framework (carrier, dfrws)."
+        ),
+        known_limitations=(
+            "The mapping switch affects all subsequent calls to "
+            "solveit_list_objectives and solveit_get_techniques_for_objective "
+            "in the current session. The change is not persistent across server "
+            "restarts — the default mapping (solve-it.json) is reloaded on each "
+            "start. Only mappings listed by solveit_list_available_mappings can "
+            "be loaded."
         ),
         input_schema={
             "type": "object",
@@ -671,6 +768,13 @@ def _register_search_tool(server: ChassisServer, kb: Any) -> None:
             "Prefer 'AND' logic for precise queries, 'OR' for broader "
             "exploration."
         ),
+        known_limitations=(
+            "Keyword matching only — semantic similarity and synonym expansion are "
+            "not evaluated. A query term must appear verbatim (or as a word "
+            "boundary match) in the name or description field to produce a hit. "
+            "Acronyms and alternative phrasings not present in the KB text will "
+            "not match. Use 'OR' logic or try multiple phrasings to improve recall."
+        ),
         input_schema={
             "type": "object",
             "properties": properties,
@@ -744,6 +848,12 @@ def _register_extension_info_tool(server: ChassisServer, kb: Any) -> None:
     server.register_tool(
         name="solveit_list_loaded_extensions",
         description="List all loaded SOLVE-IT-X extensions and their details.",
+        known_limitations=(
+            "Only extensions loaded at server startup are listed. Extensions "
+            "cannot be added or removed at runtime — a server restart is required. "
+            "An empty list means the server started with enable_extensions=false "
+            "or no extensions were found in the data directory."
+        ),
         input_schema={"type": "object", "properties": {}},
         handler=_handle,
     )
@@ -777,6 +887,12 @@ def _register_citation_tools(server: ChassisServer, kb: Any) -> None:
             "Use solveit_resolve_inline_citations to batch-replace multiple "
             "[DFCite-XXXX] markers in text more efficiently."
         ),
+        known_limitations=(
+            "Returns the citation as stored in the KB (typically BibTeX or a URL). "
+            "Completeness and accuracy of citation metadata depend on the KB "
+            "authors. Not all referenced works have full bibliographic details — "
+            "some entries may contain only a URL or a partial reference."
+        ),
         input_schema={
             "type": "object",
             "properties": {
@@ -803,6 +919,12 @@ def _register_citation_tools(server: ChassisServer, kb: Any) -> None:
             "List all citation IDs (DFCite-XXXX) in the SOLVE-IT knowledge "
             "base. Use solveit_get_citation to resolve a specific ID to its "
             "full bibliographic text."
+        ),
+        known_limitations=(
+            "Returns IDs only — not titles or authors. Call solveit_get_citation "
+            "to resolve individual IDs. Cross-referencing which techniques or "
+            "weaknesses use a specific citation requires calling those detail "
+            "tools separately."
         ),
         input_schema={"type": "object", "properties": {}},
         handler=_handle_list,
@@ -831,6 +953,12 @@ def _register_citation_tools(server: ChassisServer, kb: Any) -> None:
             "one step. "
             "More efficient than calling solveit_get_citation for each marker "
             "individually."
+        ),
+        known_limitations=(
+            "Only [DFCite-XXXX] markers with a matching ID in the KB are resolved; "
+            "unrecognised markers are left unchanged. The resolved text uses a "
+            "short-form parenthetical reference, not a full inline bibliography. "
+            "Full bibliographic text is available via solveit_get_citation."
         ),
         input_schema={
             "type": "object",
