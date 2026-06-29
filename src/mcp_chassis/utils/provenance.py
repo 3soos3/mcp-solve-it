@@ -47,8 +47,10 @@ def build_provenance_record(
     Returns:
         Dict with all required FSS provenance fields.
     """
+    import os
     result_status = fss_result_status.get() or "error"  # pessimistic default
-    evidentiary = "evidentiary" if result_status == "success" else "non-evidentiary"
+    forensic_metadata = os.environ.get("FORENSIC_METADATA", "false").lower() == "true"
+    evidentiary = "evidentiary" if (result_status == "success" and forensic_metadata) else "non-evidentiary"
 
     record: dict[str, Any] = {
         "transaction_id":     fss_transaction_id.get(),
