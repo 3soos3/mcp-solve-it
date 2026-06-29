@@ -29,33 +29,26 @@ updates:
         update-types:
           - "minor"
 
-  # GitHub Actions dependencies
+  # GitHub Actions dependencies — all updates in one PR, auto-merged when gate passes
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "03:00"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     labels:
       - "dependencies"
       - "github-actions"
+      - "automerge"
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
     groups:
-      github-actions-safe:
+      github-actions-all:
         patterns:
-          - "actions/*"
-          - "github/*"
+          - "*"
         update-types:
           - "patch"
           - "minor"
-      third-party-actions:
-        patterns:
-          - "*"
-        exclude-patterns:
-          - "actions/*"
-          - "github/*"
-        update-types:
-          - "patch"
+          - "major"
