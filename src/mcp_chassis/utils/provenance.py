@@ -47,7 +47,7 @@ def build_provenance_record(
     Returns:
         Dict with all required FSS provenance fields.
     """
-    result_status = fss_result_status.get() or "success"
+    result_status = fss_result_status.get() or "error"  # pessimistic default
     evidentiary = "evidentiary" if result_status == "success" else "non-evidentiary"
 
     record: dict[str, Any] = {

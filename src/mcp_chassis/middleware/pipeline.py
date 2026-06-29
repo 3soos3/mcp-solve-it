@@ -190,7 +190,6 @@ class MiddlewarePipeline:
             now = datetime.datetime.now(datetime.UTC)
             delta = abs((now - request_time).total_seconds())
             if delta > self._config.replay_window_seconds:
-                from mcp_chassis.errors import RateLimitError
                 raise RateLimitError(
                     f"Request timestamp outside replay window "
                     f"({delta:.0f}s > {self._config.replay_window_seconds}s)",

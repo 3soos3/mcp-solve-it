@@ -1,5 +1,7 @@
 """Unit tests for mcp_chassis.middleware.pipeline module."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from mcp_chassis.config import (
@@ -489,3 +491,100 @@ class TestSanitizationErrorHandling:
         )
         assert not result.allowed
         assert result.error_code == "KEY_COLLISION"
+
+
+class TestReplayPrevention:
+    """Tests for X-Request-Timestamp replay prevention (FSS-0003 §7.3)."""
+
+    def _make_pipeline(self, window_seconds: int = 300) -> "MiddlewarePipeline":
+        from mcp_chassis.config import SecurityConfig, RateLimitConfig, IOLimitConfig
+        from mcp_chassis.config import ValidationConfig, SanitizationConfig, AuthConfig
+        config = SecurityConfig(
+            rate_limits=RateLimitConfig(enabled=False),
+            io_limits=IOLimitConfig(max_request_size=1_048_576, max_response_size=5_242_880),
+            input_validation=ValidationConfig(enabled=False),
+            input_sanitization=SanitizationConfig(enabled=False, level="permissive"),
+            auth=AuthConfig(enabled=False, provider="none"),
+            replay_window_seconds=window_seconds,
+        )
+        return MiddlewarePipeline(config)
+
+    @pytest.mark.asyncio
+    async def test_no_timestamp_allowed(self) -> None:
+        """No X-Request-Timestamp header (stdio path) → always passes."""
+        from mcp_chassis.utils.fss_context import fss_request_timestamp
+        fss_request_timestamp.set(None)
+        pipeline = self._make_pipeline()
+        result = pipeline._check_replay()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_timestamp_within_window_allowed(self) -> None:
+        from mcp_chassis.utils.fss_context import fss_request_timestamp
+        ts = datetime.now(UTC).isoformat()
+        fss_request_timestamp.set(ts)
+        pipeline = self._make_pipeline(window_seconds=300)
+        result = pipeline._check_replay()
+        assert result is None
+        fss_request_timestamp.set(None)
+
+    @pytest.mark.asyncio
+    async def test_timestamp_outside_window_rejected(self) -> None:
+        from mcp_chassis.utils.fss_context import fss_request_timestamp
+        old_ts = (datetime.now(UTC) - timedelta(seconds=400)).isoformat()
+        fss_request_timestamp.set(old_ts)
+        pipeline = self._make_pipeline(window_seconds=300)
+        result = pipeline._check_replay()
+        assert result is not None
+        assert not result.allowed
+        assert result.error_code == "REPLAY_REJECTED"
+        fss_request_timestamp.set(None)
+
+    @pytest.mark.asyncio
+    async def test_future_timestamp_outside_window_rejected(self) -> None:
+        from mcp_chassis.utils.fss_context import fss_request_timestamp
+        future_ts = (datetime.now(UTC) + timedelta(seconds=400)).isoformat()
+        fss_request_timestamp.set(future_ts)
+        pipeline = self._make_pipeline(window_seconds=300)
+        result = pipeline._check_replay()
+        assert result is not None
+        assert not result.allowed
+        fss_request_timestamp.set(None)
+
+    @pytest.mark.asyncio
+    async def test_invalid_timestamp_format_allowed(self) -> None:
+        """Malformed timestamp is logged and ignored, not rejected."""
+        from mcp_chassis.utils.fss_context import fss_request_timestamp
+        fss_request_timestamp.set("not-a-date")
+        pipeline = self._make_pipeline()
+        result = pipeline._check_replay()
+        assert result is None
+        fss_request_timestamp.set(None)
+
+    @pytest.mark.asyncio
+    async def test_replay_window_zero_disables_check(self) -> None:
+        from mcp_chassis.utils.fss_context import fss_request_timestamp
+        old_ts = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
+        fss_request_timestamp.set(old_ts)
+        pipeline = self._make_pipeline(window_seconds=0)
+        result = pipeline._check_replay()
+        assert result is None
+        fss_request_timestamp.set(None)
+
+    @pytest.mark.asyncio
+    async def test_replay_check_in_process_tool_request(self) -> None:
+        """Replay rejection is triggered through the full pipeline."""
+        from mcp_chassis.utils.fss_context import fss_request_timestamp
+        old_ts = (datetime.now(UTC) - timedelta(seconds=400)).isoformat()
+        fss_request_timestamp.set(old_ts)
+        pipeline = self._make_pipeline(window_seconds=300)
+        result = await pipeline.process_tool_request(
+            tool_name="test_tool",
+            arguments={},
+            schema={"type": "object", "properties": {}},
+            request_context={},
+        )
+        assert not result.allowed
+        assert result.error_code == "REPLAY_REJECTED"
+        fss_request_timestamp.set(None)
+
