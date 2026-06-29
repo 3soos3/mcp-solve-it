@@ -503,7 +503,8 @@ class TestAllToolsRegistered:
         all_tools = self._ALL_DEFAULT_TOOLS + self._FULL_DETAIL_TOOLS
         for tool in all_tools:
             assert tool in server._registered_tools, f"Missing: {tool}"
-        assert len(server._registered_tools) >= len(self._ALL_DEFAULT_TOOLS) + len(self._FULL_DETAIL_TOOLS)
+        expected = len(self._ALL_DEFAULT_TOOLS) + len(self._FULL_DETAIL_TOOLS)
+        assert len(server._registered_tools) >= expected
 
     def test_kb_failure_registers_only_status(self) -> None:
         from mcp_chassis.extensions.tools.solveit_tools import register
