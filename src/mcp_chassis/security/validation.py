@@ -146,9 +146,7 @@ def _validate_value(
         _validate_object(value, schema, limits, path, depth, errors)
 
 
-def _check_type(
-    value: Any, schema_type: str | list[str], path: str, errors: list[str]
-) -> None:
+def _check_type(value: Any, schema_type: str | list[str], path: str, errors: list[str]) -> None:
     """Check that value matches the expected JSON schema type(s).
 
     Args:
@@ -218,14 +216,10 @@ def _validate_string(
         )
     max_len = _get_int_limit(schema, "maxLength")
     if max_len is not None and len(value) > max_len:
-        errors.append(
-            f"{path}: string length {len(value)} exceeds maxLength {max_len}"
-        )
+        errors.append(f"{path}: string length {len(value)} exceeds maxLength {max_len}")
     min_len = _get_int_limit(schema, "minLength")
     if min_len is not None and len(value) < min_len:
-        errors.append(
-            f"{path}: string length {len(value)} below minLength {min_len}"
-        )
+        errors.append(f"{path}: string length {len(value)} below minLength {min_len}")
 
 
 def _validate_array(
@@ -247,21 +241,15 @@ def _validate_array(
         errors: Accumulator.
     """
     if len(value) > limits.max_array_length:
-        errors.append(
-            f"{path}: array length {len(value)} exceeds limit {limits.max_array_length}"
-        )
+        errors.append(f"{path}: array length {len(value)} exceeds limit {limits.max_array_length}")
         return
 
     max_items = _get_int_limit(schema, "maxItems")
     if max_items is not None and len(value) > max_items:
-        errors.append(
-            f"{path}: array length {len(value)} exceeds maxItems {max_items}"
-        )
+        errors.append(f"{path}: array length {len(value)} exceeds maxItems {max_items}")
     min_items = _get_int_limit(schema, "minItems")
     if min_items is not None and len(value) < min_items:
-        errors.append(
-            f"{path}: array length {len(value)} below minItems {min_items}"
-        )
+        errors.append(f"{path}: array length {len(value)} below minItems {min_items}")
 
     items_schema = schema.get("items", {})
     for i, item in enumerate(value):

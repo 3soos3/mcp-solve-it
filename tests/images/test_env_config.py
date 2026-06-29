@@ -14,22 +14,28 @@ from .image_configs import BY_TAG
 
 
 class TestSolveItMode:
-    @pytest.mark.parametrize("fixture_name,expected", [
-        ("live",    "live"),
-        ("monthly", "monthly"),
-        ("version", "release"),
-    ])
+    @pytest.mark.parametrize(
+        "fixture_name,expected",
+        [
+            ("live", "live"),
+            ("monthly", "monthly"),
+            ("version", "release"),
+        ],
+    )
     def test_solve_it_mode(
         self, fixture_name: str, expected: str, request: pytest.FixtureRequest
     ) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         assert client.get_env("SOLVE_IT_MODE") == expected
 
-    @pytest.mark.parametrize("fixture_name,expected", [
-        ("live",    "false"),
-        ("monthly", "false"),
-        ("version", "true"),
-    ])
+    @pytest.mark.parametrize(
+        "fixture_name,expected",
+        [
+            ("live", "false"),
+            ("monthly", "false"),
+            ("version", "true"),
+        ],
+    )
     def test_forensic_metadata(
         self, fixture_name: str, expected: str, request: pytest.FixtureRequest
     ) -> None:

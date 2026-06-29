@@ -29,10 +29,10 @@ from locust.runners import MasterRunner, WorkerRunner
 # ---------------------------------------------------------------------------
 
 STEPS = [
-    (10,  30),   # (users, seconds at this level)
-    (25,  30),
-    (50,  30),
-    (75,  30),
+    (10, 30),  # (users, seconds at this level)
+    (25, 30),
+    (50, 30),
+    (75, 30),
     (100, 30),
     (150, 30),
     (200, 30),
@@ -46,6 +46,7 @@ _step_start = 0.0
 def on_init(environment: Environment, **kwargs):
     if not isinstance(environment.runner, (MasterRunner, WorkerRunner)):
         import gevent
+
         gevent.spawn(_step_loop, environment)
 
 
@@ -181,60 +182,96 @@ class SolveItUser(HttpUser):
 
     @task(6)
     def get_technique(self):
-        _call(self.client, "solveit_get_technique", "solveit_get_technique",
-              {"technique_id": "SIT-0001"})
+        _call(
+            self.client,
+            "solveit_get_technique",
+            "solveit_get_technique",
+            {"technique_id": "SIT-0001"},
+        )
 
     @task(4)
     def get_weakness_details(self):
-        _call(self.client, "get_weakness_details", "get_weakness_details",
-              {"weakness_id": "SIW-0001"})
+        _call(
+            self.client, "get_weakness_details", "get_weakness_details", {"weakness_id": "SIW-0001"}
+        )
 
     @task(4)
     def get_mitigation_details(self):
-        _call(self.client, "get_mitigation_details", "get_mitigation_details",
-              {"mitigation_id": "SIM-0001"})
+        _call(
+            self.client,
+            "get_mitigation_details",
+            "get_mitigation_details",
+            {"mitigation_id": "SIM-0001"},
+        )
 
     @task(3)
     def get_citation(self):
-        _call(self.client, "get_citation", "get_citation",
-              {"citation_id": "DFCite-0001"})
+        _call(self.client, "get_citation", "get_citation", {"citation_id": "DFCite-0001"})
 
     @task(2)
     def resolve_inline_citations(self):
-        _call(self.client, "resolve_inline_citations", "resolve_inline_citations",
-              {"text": "See DFCite-0001 and DFCite-0002 for details."})
+        _call(
+            self.client,
+            "resolve_inline_citations",
+            "resolve_inline_citations",
+            {"text": "See DFCite-0001 and DFCite-0002 for details."},
+        )
 
     # --- Relationship traversal ---
 
     @task(3)
     def get_mitigations_for_technique(self):
-        _call(self.client, "get_mitigations_for_technique", "get_mitigations_for_technique",
-              {"technique_id": "SIT-0001"})
+        _call(
+            self.client,
+            "get_mitigations_for_technique",
+            "get_mitigations_for_technique",
+            {"technique_id": "SIT-0001"},
+        )
 
     @task(3)
     def get_weaknesses_for_technique(self):
-        _call(self.client, "get_weaknesses_for_technique", "get_weaknesses_for_technique",
-              {"technique_id": "SIT-0001"})
+        _call(
+            self.client,
+            "get_weaknesses_for_technique",
+            "get_weaknesses_for_technique",
+            {"technique_id": "SIT-0001"},
+        )
 
     @task(3)
     def get_mitigations_for_weakness(self):
-        _call(self.client, "get_mitigations_for_weakness", "get_mitigations_for_weakness",
-              {"weakness_id": "SIW-0001"})
+        _call(
+            self.client,
+            "get_mitigations_for_weakness",
+            "get_mitigations_for_weakness",
+            {"weakness_id": "SIW-0001"},
+        )
 
     @task(3)
     def get_techniques_for_weakness(self):
-        _call(self.client, "get_techniques_for_weakness", "get_techniques_for_weakness",
-              {"weakness_id": "SIW-0001"})
+        _call(
+            self.client,
+            "get_techniques_for_weakness",
+            "get_techniques_for_weakness",
+            {"weakness_id": "SIW-0001"},
+        )
 
     @task(2)
     def get_weaknesses_for_mitigation(self):
-        _call(self.client, "get_weaknesses_for_mitigation", "get_weaknesses_for_mitigation",
-              {"mitigation_id": "SIM-0001"})
+        _call(
+            self.client,
+            "get_weaknesses_for_mitigation",
+            "get_weaknesses_for_mitigation",
+            {"mitigation_id": "SIM-0001"},
+        )
 
     @task(2)
     def get_techniques_for_mitigation(self):
-        _call(self.client, "get_techniques_for_mitigation", "get_techniques_for_mitigation",
-              {"mitigation_id": "SIM-0001"})
+        _call(
+            self.client,
+            "get_techniques_for_mitigation",
+            "get_techniques_for_mitigation",
+            {"mitigation_id": "SIM-0001"},
+        )
 
     # --- Objectives ---
 
@@ -244,50 +281,77 @@ class SolveItUser(HttpUser):
 
     @task(2)
     def get_techniques_for_objective(self):
-        _call(self.client, "get_techniques_for_objective", "get_techniques_for_objective",
-              {"objective_id": "OBJ-001"})
+        _call(
+            self.client,
+            "get_techniques_for_objective",
+            "get_techniques_for_objective",
+            {"objective_id": "OBJ-001"},
+        )
 
     @task(2)
     def get_objectives_for_technique(self):
-        _call(self.client, "get_objectives_for_technique", "get_objectives_for_technique",
-              {"technique_id": "SIT-0001"})
+        _call(
+            self.client,
+            "get_objectives_for_technique",
+            "get_objectives_for_technique",
+            {"technique_id": "SIT-0001"},
+        )
 
     # --- Bulk (expensive — low weight) ---
 
     @task(2)
     def get_all_techniques_with_name_and_id(self):
-        _call(self.client, "get_all_techniques_with_name_and_id",
-              "get_all_techniques_with_name_and_id")
+        _call(
+            self.client,
+            "get_all_techniques_with_name_and_id",
+            "get_all_techniques_with_name_and_id",
+        )
 
     @task(2)
     def get_all_weaknesses_with_name_and_id(self):
-        _call(self.client, "get_all_weaknesses_with_name_and_id",
-              "get_all_weaknesses_with_name_and_id")
+        _call(
+            self.client,
+            "get_all_weaknesses_with_name_and_id",
+            "get_all_weaknesses_with_name_and_id",
+        )
 
     @task(2)
     def get_all_mitigations_with_name_and_id(self):
-        _call(self.client, "get_all_mitigations_with_name_and_id",
-              "get_all_mitigations_with_name_and_id")
+        _call(
+            self.client,
+            "get_all_mitigations_with_name_and_id",
+            "get_all_mitigations_with_name_and_id",
+        )
 
     @task(1)
     def get_all_techniques_with_full_detail(self):
-        _call(self.client, "get_all_techniques_with_full_detail",
-              "get_all_techniques_with_full_detail")
+        _call(
+            self.client,
+            "get_all_techniques_with_full_detail",
+            "get_all_techniques_with_full_detail",
+        )
 
     @task(1)
     def get_all_weaknesses_with_full_detail(self):
-        _call(self.client, "get_all_weaknesses_with_full_detail",
-              "get_all_weaknesses_with_full_detail")
+        _call(
+            self.client,
+            "get_all_weaknesses_with_full_detail",
+            "get_all_weaknesses_with_full_detail",
+        )
 
     @task(1)
     def get_all_mitigations_with_full_detail(self):
-        _call(self.client, "get_all_mitigations_with_full_detail",
-              "get_all_mitigations_with_full_detail")
+        _call(
+            self.client,
+            "get_all_mitigations_with_full_detail",
+            "get_all_mitigations_with_full_detail",
+        )
 
 
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
+
 
 @events.quitting.add_listener
 def on_quitting(environment, **kwargs):
@@ -295,19 +359,17 @@ def on_quitting(environment, **kwargs):
     print("\n=== Stepped Load Test Summary ===")
     print(f"  Steps run      : {len(STEPS)} (10->25->50->75->100->150->200 users)")
     print(f"  Total requests : {stats.total.num_requests}")
-    print(f"  Failures       : {stats.total.num_failures} "
-          f"({100 * stats.total.num_failures / max(stats.total.num_requests, 1):.1f}%)")
+    print(
+        f"  Failures       : {stats.total.num_failures} "
+        f"({100 * stats.total.num_failures / max(stats.total.num_requests, 1):.1f}%)"
+    )
     print(f"  Median (ms)    : {stats.total.median_response_time}")
     print(f"  95th pct (ms)  : {stats.total.get_response_time_percentile(0.95)}")
     print(f"  Peak RPS       : {stats.total.current_rps:.1f}")
     print("")
     print("  Per-tool 95th percentile:")
-    for name, entry in sorted(
-        stats.entries.items(), key=lambda x: x[1].num_requests, reverse=True
-    ):
+    for name, entry in sorted(stats.entries.items(), key=lambda x: x[1].num_requests, reverse=True):
         p95 = entry.get_response_time_percentile(0.95)
         fails = entry.num_failures
-        print(
-            f"    {name[1]:<50} p95={p95:>5}ms  reqs={entry.num_requests:>5}  fails={fails}"
-        )
+        print(f"    {name[1]:<50} p95={p95:>5}ms  reqs={entry.num_requests:>5}  fails={fails}")
     print("=================================\n")

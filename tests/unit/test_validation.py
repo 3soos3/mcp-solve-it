@@ -293,9 +293,7 @@ class TestMultipleErrorReporting:
                 "y": {"type": "boolean"},
             },
         }
-        result = validate_tool_input(
-            {"x": "wrong", "y": "also-wrong"}, schema, DEFAULT_LIMITS
-        )
+        result = validate_tool_input({"x": "wrong", "y": "also-wrong"}, schema, DEFAULT_LIMITS)
         assert not result.valid
         assert any("x" in e for e in result.errors)
         assert any("y" in e for e in result.errors)

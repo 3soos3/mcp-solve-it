@@ -108,6 +108,7 @@ class ChassisServer:
         # Register built-in health check if enabled
         if config.diagnostics.health_check_enabled:
             from mcp_chassis.diagnostics.health import register_health_check
+
             register_health_check(self)
 
         # Auto-discover extensions if enabled
@@ -139,11 +140,13 @@ class ChassisServer:
                     fss_meta["x-fss-deprecated-in"] = info.get("deprecated_in", "")
                     fss_meta["x-fss-removal-in"] = info.get("removal_in", "")
                 input_schema = {**info["input_schema"], **fss_meta}
-                tools.append(types.Tool(
-                    name=name,
-                    description=info["description"],
-                    inputSchema=input_schema,
-                ))
+                tools.append(
+                    types.Tool(
+                        name=name,
+                        description=info["description"],
+                        inputSchema=input_schema,
+                    )
+                )
             return tools
 
         @self._sdk_server.call_tool(validate_input=False)  # type: ignore[untyped-decorator]
@@ -216,6 +219,7 @@ class ChassisServer:
         """Auto-discover and register extensions from the extensions package."""
         try:
             from mcp_chassis.extensions import discover_extensions
+
             discover_extensions(self)
         except ImportError:
             logger.debug("Extensions package not available, skipping auto-discovery")
@@ -275,7 +279,9 @@ class ChassisServer:
         if deprecated:
             logger.warning(
                 "Registering deprecated tool '%s' (deprecated in %s, removal in %s)",
-                name, deprecated_in or "unknown", removal_in or "unknown",
+                name,
+                deprecated_in or "unknown",
+                removal_in or "unknown",
             )
 
         self._tools[name] = {
@@ -468,6 +474,7 @@ class ChassisServer:
         _metrics_start: float | None = None
         try:
             from mcp_chassis.utils.metrics import get_metrics
+
             _metrics_start = get_metrics().record_call_start(tool_name)
         except Exception:
             pass
@@ -477,6 +484,7 @@ class ChassisServer:
         try:
             if _metrics_start is not None:
                 from mcp_chassis.utils.metrics import get_metrics
+
                 get_metrics().record_call_end(
                     tool_name,
                     _metrics_start,
@@ -509,9 +517,7 @@ class ChassisServer:
             _session=handler_ctx._session,
         )
 
-        def _fss_error(
-            code: str, message: str, *, partial: bool = False
-        ) -> types.CallToolResult:
+        def _fss_error(code: str, message: str, *, partial: bool = False) -> types.CallToolResult:
             """Build an FSS error response with provenance block.
 
             Does NOT reset FSS context — the caller's finally block handles that.
@@ -526,9 +532,7 @@ class ChassisServer:
             try:
                 provenance = build_provenance_record(
                     tool_name=tool_name,
-                    tool_version=self._tools.get(tool_name, {}).get(
-                        "tool_version", "0.0.0"
-                    ),
+                    tool_version=self._tools.get(tool_name, {}).get("tool_version", "0.0.0"),
                     kb_version_id=getattr(self, "_kb_version_id", None),
                     kb_version=getattr(self, "_kb_version", None),
                 )
@@ -536,9 +540,7 @@ class ChassisServer:
             except Exception:
                 payload = err.to_dict()
             return types.CallToolResult(
-                content=[types.TextContent(
-                    type="text", text=json.dumps(payload)
-                )],
+                content=[types.TextContent(type="text", text=json.dumps(payload))],
                 isError=True,
             )
 
@@ -563,6 +565,7 @@ class ChassisServer:
 
         # ── 4. Middleware pipeline ─────────────────────────────────────
         from mcp_chassis.utils.fss_context import fss_auth_token
+
         request_context: dict[str, Any] = {
             "client_identity": fss_client_identity.get(),
             "token": fss_auth_token.get(),  # bearer token from HTTP Authorization header
@@ -579,7 +582,9 @@ class ChassisServer:
         if not middleware_result.allowed:
             logger.warning(
                 "Middleware blocked '%s': %s [txn=%s]",
-                tool_name, middleware_result.error_code, transaction_id,
+                tool_name,
+                middleware_result.error_code,
+                transaction_id,
             )
             # Map chassis error codes to FSS taxonomy
             code = middleware_result.error_code
@@ -639,9 +644,7 @@ class ChassisServer:
                 result_obj["_provenance"] = provenance
                 response_text = json.dumps(result_obj)
             else:
-                response_text = json.dumps(
-                    {"result": result_obj, "_provenance": provenance}
-                )
+                response_text = json.dumps({"result": result_obj, "_provenance": provenance})
 
             self._middleware.check_response_size(response_text)
 
@@ -686,9 +689,7 @@ class ChassisServer:
                 f"{middleware_result.error_code}: Request failed"
                 f" [correlation_id={middleware_result.correlation_id}]"
             )
-        return McpError(
-            types.ErrorData(code=types.INVALID_REQUEST, message=message)
-        )
+        return McpError(types.ErrorData(code=types.INVALID_REQUEST, message=message))
 
     async def _dispatch_resource(self, uri_str: str) -> list[Any]:
         """Run middleware pipeline and dispatch a resource read to the registered handler.
@@ -759,9 +760,7 @@ class ChassisServer:
                 message = f"{exc.code}: {exc}"
             else:
                 message = f"{exc.code}: Request failed [correlation_id={exc.correlation_id}]"
-            raise McpError(
-                types.ErrorData(code=types.INTERNAL_ERROR, message=message)
-            ) from exc
+            raise McpError(types.ErrorData(code=types.INTERNAL_ERROR, message=message)) from exc
 
         mime = resource_info.get("mime_type") or "text/plain"
         return [ReadResourceContents(content=content_text, mime_type=mime)]
@@ -859,7 +858,8 @@ class ChassisServer:
         except (KeyError, TypeError) as exc:
             logger.error(
                 "Prompt handler for '%s' returned malformed messages: %s",
-                prompt_name, exc,
+                prompt_name,
+                exc,
             )
             raise McpError(
                 types.ErrorData(
@@ -879,25 +879,23 @@ class ChassisServer:
         # Check response size on the normalized prompt payload
         description = prompt_info.get("description")
         try:
-            response_payload = json.dumps({
-                "description": description,
-                "messages": [
-                    {"role": msg["role"], "content": {"type": "text", "text": msg["content"]}}
-                    for msg in messages_raw
-                ],
-            })
+            response_payload = json.dumps(
+                {
+                    "description": description,
+                    "messages": [
+                        {"role": msg["role"], "content": {"type": "text", "text": msg["content"]}}
+                        for msg in messages_raw
+                    ],
+                }
+            )
             self._middleware.check_response_size(response_payload)
         except ChassisError as exc:
-            logger.error(
-                "Response size check failed for prompt '%s': %s", prompt_name, exc
-            )
+            logger.error("Response size check failed for prompt '%s': %s", prompt_name, exc)
             if self._config.security.detailed_errors:
                 message = f"{exc.code}: {exc}"
             else:
                 message = f"{exc.code}: Request failed [correlation_id={exc.correlation_id}]"
-            raise McpError(
-                types.ErrorData(code=types.INTERNAL_ERROR, message=message)
-            ) from exc
+            raise McpError(types.ErrorData(code=types.INTERNAL_ERROR, message=message)) from exc
 
         return types.GetPromptResult(
             description=description,
@@ -936,9 +934,11 @@ class ChassisServer:
 
         if transport_name == "stdio":
             from mcp_chassis.transport.stdio import StdioTransport
+
             self._transport = StdioTransport()
         elif transport_name == "http":
             from mcp_chassis.transport.http import HTTPTransport
+
             self._transport = HTTPTransport()
         else:
             raise ExtensionError(

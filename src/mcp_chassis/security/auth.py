@@ -90,9 +90,7 @@ class AuthProvider(ABC):
         """
 
     @abstractmethod
-    async def authorize(
-        self, identity: AuthIdentity, tool_name: str, scopes: list[str]
-    ) -> bool:
+    async def authorize(self, identity: AuthIdentity, tool_name: str, scopes: list[str]) -> bool:
         """Check if an identity is authorized to call a tool with given scopes.
 
         Args:
@@ -124,9 +122,7 @@ class NoAuthProvider(AuthProvider):
         """
         return AuthResult.success(AuthIdentity(id="local", scopes=frozenset(["*"])))
 
-    async def authorize(
-        self, identity: AuthIdentity, tool_name: str, scopes: list[str]
-    ) -> bool:
+    async def authorize(self, identity: AuthIdentity, tool_name: str, scopes: list[str]) -> bool:
         """Authorize — always grants access.
 
         Args:
@@ -186,14 +182,10 @@ class TokenAuthProvider(AuthProvider):
             self._token.encode("utf-8"),
         )
         if match:
-            return AuthResult.success(
-                AuthIdentity(id="token-user", scopes=frozenset(["*"]))
-            )
+            return AuthResult.success(AuthIdentity(id="token-user", scopes=frozenset(["*"])))
         return AuthResult.failure("Authentication failed: invalid token")
 
-    async def authorize(
-        self, identity: AuthIdentity, tool_name: str, scopes: list[str]
-    ) -> bool:
+    async def authorize(self, identity: AuthIdentity, tool_name: str, scopes: list[str]) -> bool:
         """Authorize based on wildcard scope or explicit scope match.
 
         Args:
@@ -237,7 +229,8 @@ class ApiKeyProvider(AuthProvider):
             self._key_store = _json.loads(Path(self._keys_path).read_text())
             logger.info(
                 "ApiKeyProvider: loaded %d key hashes from %s",
-                len(self._key_store), self._keys_path,
+                len(self._key_store),
+                self._keys_path,
             )
         except Exception as exc:
             logger.error("ApiKeyProvider: failed to load keys from %s: %s", self._keys_path, exc)
@@ -269,9 +262,7 @@ class ApiKeyProvider(AuthProvider):
 
         return AuthResult.success(AuthIdentity(id=identity_label, scopes=frozenset(["*"])))
 
-    async def authorize(
-        self, identity: AuthIdentity, tool_name: str, scopes: list[str]
-    ) -> bool:
+    async def authorize(self, identity: AuthIdentity, tool_name: str, scopes: list[str]) -> bool:
         return "*" in identity.scopes or all(s in identity.scopes for s in scopes)
 
 
@@ -332,6 +323,7 @@ class OAuthJWTProvider(AuthProvider):
             jwks = await self._get_jwks()  # noqa: F841
             # Use PyJWT's PyJWKClient for JWKS-based key selection
             from jwt import PyJWKClient  # type: ignore[import-untyped]
+
             jwk_client = PyJWKClient(self._jwks_url)
             # Use cached JWKS to avoid extra network call
             signing_key = jwk_client.get_signing_key_from_jwt(token)
@@ -350,9 +342,7 @@ class OAuthJWTProvider(AuthProvider):
             logger.warning("JWT validation failed: %s", exc)
             return AuthResult.failure(f"Authentication failed: {exc}")
 
-    async def authorize(
-        self, identity: AuthIdentity, tool_name: str, scopes: list[str]
-    ) -> bool:
+    async def authorize(self, identity: AuthIdentity, tool_name: str, scopes: list[str]) -> bool:
         return "*" in identity.scopes or all(s in identity.scopes for s in scopes)
 
 

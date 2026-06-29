@@ -23,13 +23,14 @@ from .image_configs import FAST_FAIL, SOLVEIT_VOL
 
 # Host ports for HTTP container tests — each fixture gets a unique port.
 # These are chosen to avoid conflicts with common local services.
-_PORT_VERSION  = 29876
-_PORT_LIVE     = 29877
-_PORT_AUTH     = 29878
+_PORT_VERSION = 29876
+_PORT_LIVE = 29877
+_PORT_AUTH = 29878
 _READY_TIMEOUT = 30  # seconds to wait for /healthz to respond
 
 
 # ── Container fixture ─────────────────────────────────────────────────────────
+
 
 @contextlib.contextmanager
 def _http_container(
@@ -44,10 +45,16 @@ def _http_container(
     MCP_PORT is passed explicitly to control which port the server listens on.
     """
     cmd = [
-        "podman", "run", "--rm", "-d",
-        "--network", "host",
-        "--name", f"pytest-http-{port}",
-        "-e", f"MCP_PORT={port}",
+        "podman",
+        "run",
+        "--rm",
+        "-d",
+        "--network",
+        "host",
+        "--name",
+        f"pytest-http-{port}",
+        "-e",
+        f"MCP_PORT={port}",
     ]
     for e in extra_env:
         cmd += ["-e", e]
@@ -69,12 +76,10 @@ def _http_container(
             time.sleep(0.5)
         else:
             logs = subprocess.run(
-                ["podman", "logs", container_id],
-                capture_output=True
+                ["podman", "logs", container_id], capture_output=True
             ).stderr.decode(errors="replace")[-500:]
             raise TimeoutError(
-                f"Container {image} did not become ready within {_READY_TIMEOUT}s.\n"
-                f"Logs: {logs}"
+                f"Container {image} did not become ready within {_READY_TIMEOUT}s.\nLogs: {logs}"
             )
         yield base_url
     finally:
@@ -85,6 +90,7 @@ def _http_container(
 
 
 # ── MCP HTTP helpers ──────────────────────────────────────────────────────────
+
 
 def _mcp_post(
     base_url: str,
@@ -98,8 +104,7 @@ def _mcp_post(
     event whose ``data:`` line is a JSON-RPC object.  We read the full response
     body (the connection closes after the event) and extract the data line.
     """
-    h = {"Content-Type": "application/json",
-         "Accept": "application/json, text/event-stream"}
+    h = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
     if headers:
         h.update(headers)
     with httpx.Client(timeout=timeout) as client:
@@ -126,9 +131,16 @@ def _mcp_call(
     headers: dict[str, str] = {}
     if auth_token is not None:
         headers["Authorization"] = f"Bearer {auth_token}"
-    return _mcp_post(base_url, {
-        "jsonrpc": "2.0", "id": 1, "method": method, "params": params or {},
-    }, headers=headers)
+    return _mcp_post(
+        base_url,
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": method,
+            "params": params or {},
+        },
+        headers=headers,
+    )
 
 
 def _mcp_session(
@@ -142,6 +154,7 @@ def _mcp_session(
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="module")
 def version_http(version_image: str) -> Generator[str, None, None]:
@@ -161,6 +174,7 @@ def live_http(live_image: str) -> Generator[str, None, None]:
 
 
 # ── Health endpoint tests ─────────────────────────────────────────────────────
+
 
 class TestHealthEndpoints:
     def test_healthz_returns_200(self, version_http: str) -> None:
@@ -191,12 +205,18 @@ class TestHealthEndpoints:
 
 # ── MCP protocol over HTTP ────────────────────────────────────────────────────
 
+
 class TestMCPOverHTTP:
     def test_initialize_succeeds(self, version_http: str) -> None:
-        resp = _mcp_call(version_http, "initialize", {
-            "protocolVersion": "2024-11-05", "capabilities": {},
-            "clientInfo": {"name": "pytest", "version": "1.0"},
-        })
+        resp = _mcp_call(
+            version_http,
+            "initialize",
+            {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "pytest", "version": "1.0"},
+            },
+        )
         assert "result" in resp, f"initialize failed: {resp}"
         assert "serverInfo" in resp["result"]
 
@@ -207,37 +227,50 @@ class TestMCPOverHTTP:
         assert len(tools) >= 24
 
     def test_solveit_status_over_http(self, version_http: str) -> None:
-        resp = _mcp_session(version_http, "tools/call", {
-            "name": "solveit_status", "arguments": {}
-        })
+        resp = _mcp_session(version_http, "tools/call", {"name": "solveit_status", "arguments": {}})
         assert "result" in resp, f"solveit_status failed: {resp}"
         content = resp["result"]["content"][0]["text"]
         data = json.loads(content)
         assert data.get("status") == "ok"
 
     def test_get_technique_over_http(self, version_http: str) -> None:
-        resp = _mcp_session(version_http, "tools/call", {
-            "name": "solveit_get_technique",
-            "arguments": {"technique_id": "DFT-1001"},
-        })
+        resp = _mcp_session(
+            version_http,
+            "tools/call",
+            {
+                "name": "solveit_get_technique",
+                "arguments": {"technique_id": "DFT-1001"},
+            },
+        )
         assert "result" in resp
         data = json.loads(resp["result"]["content"][0]["text"])
         payload = data.get("result", data)
         assert isinstance(payload.get("name"), str) and payload["name"]
 
     def test_provenance_present_over_http(self, version_http: str) -> None:
-        resp = _mcp_session(version_http, "tools/call", {
-            "name": "solveit_search", "arguments": {"keywords": "triage"},
-        })
+        resp = _mcp_session(
+            version_http,
+            "tools/call",
+            {
+                "name": "solveit_search",
+                "arguments": {"keywords": "triage"},
+            },
+        )
         data = json.loads(resp["result"]["content"][0]["text"])
         assert "_provenance" in data, "FSS provenance missing in HTTP response"
         assert data["_provenance"].get("evidentiary_status") == "evidentiary"
 
     def test_fss_headers_set_investigation_id(self, version_http: str) -> None:
         """FSS investigation context headers should appear in provenance."""
-        resp = _mcp_session(version_http, "tools/call", {
-            "name": "solveit_status", "arguments": {},
-        }, auth_token=None)
+        resp = _mcp_session(
+            version_http,
+            "tools/call",
+            {
+                "name": "solveit_status",
+                "arguments": {},
+            },
+            auth_token=None,
+        )
         # Basic check: provenance block is returned; investigation_id wiring
         # is verified via the _provenance.investigation_id field if set.
         data = json.loads(resp["result"]["content"][0]["text"])
@@ -245,6 +278,7 @@ class TestMCPOverHTTP:
 
 
 # ── Token auth over HTTP ──────────────────────────────────────────────────────
+
 
 class TestTokenAuthHTTP:
     """Token auth is supported on HTTP transport (unlike stdio where it's blocked).
@@ -289,17 +323,28 @@ class TestTokenAuthHTTP:
             return {"_raw": content[0].get("text", ""), "_is_error": result.get("isError")}
 
     def test_valid_token_allows_tool_call(self, auth_url: str) -> None:
-        resp = _mcp_session(auth_url, "tools/call", {
-            "name": "solveit_status", "arguments": {},
-        }, auth_token="test-secret-xyz")
+        resp = _mcp_session(
+            auth_url,
+            "tools/call",
+            {
+                "name": "solveit_status",
+                "arguments": {},
+            },
+            auth_token="test-secret-xyz",
+        )
         data = self._parse_tool_result(resp)
-        assert data.get("status") == "ok", \
-            f"Valid token should allow tool call: {data}"
+        assert data.get("status") == "ok", f"Valid token should allow tool call: {data}"
 
     def test_no_token_blocks_tool_call(self, auth_url: str) -> None:
-        resp = _mcp_session(auth_url, "tools/call", {
-            "name": "solveit_status", "arguments": {},
-        }, auth_token=None)
+        resp = _mcp_session(
+            auth_url,
+            "tools/call",
+            {
+                "name": "solveit_status",
+                "arguments": {},
+            },
+            auth_token=None,
+        )
         data = self._parse_tool_result(resp)
         is_blocked = (
             "_rpc_error" in data
@@ -308,13 +353,18 @@ class TestTokenAuthHTTP:
             or "AUTH" in str(data).upper()
             or data.get("status") != "ok"
         )
-        assert is_blocked, \
-            f"Missing token should be rejected by auth middleware: {data}"
+        assert is_blocked, f"Missing token should be rejected by auth middleware: {data}"
 
     def test_wrong_token_blocks_tool_call(self, auth_url: str) -> None:
-        resp = _mcp_session(auth_url, "tools/call", {
-            "name": "solveit_status", "arguments": {},
-        }, auth_token="wrong-token")
+        resp = _mcp_session(
+            auth_url,
+            "tools/call",
+            {
+                "name": "solveit_status",
+                "arguments": {},
+            },
+            auth_token="wrong-token",
+        )
         data = self._parse_tool_result(resp)
         is_blocked = (
             "_rpc_error" in data
@@ -323,8 +373,7 @@ class TestTokenAuthHTTP:
             or "AUTH" in str(data).upper()
             or data.get("status") != "ok"
         )
-        assert is_blocked, \
-            f"Wrong token should be rejected by auth middleware: {data}"
+        assert is_blocked, f"Wrong token should be rejected by auth middleware: {data}"
 
     def test_healthz_accessible_without_token(self, auth_url: str) -> None:
         """The health endpoint must remain reachable without auth."""

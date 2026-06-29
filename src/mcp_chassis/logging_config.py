@@ -67,9 +67,7 @@ class JSONFormatter(logging.Formatter):
         msg = record.getMessage()
         # Strip ASCII control characters (including newlines) to ensure
         # single-line JSON output and prevent log injection.
-        return "".join(
-            ch for ch in msg if ch == "\t" or ord(ch) >= 32
-        )
+        return "".join(ch for ch in msg if ch == "\t" or ord(ch) >= 32)
 
 
 _SECURITY_LOGGER_NAME = "mcp_chassis.security"

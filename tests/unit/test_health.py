@@ -174,6 +174,7 @@ class TestHealthCheckOutput:
         data = json.loads(await handler({}, ctx))
         assert "chassis_version" in data
         import mcp_chassis
+
         assert data["chassis_version"] == mcp_chassis.__version__
 
     @pytest.mark.asyncio

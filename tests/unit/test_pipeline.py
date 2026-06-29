@@ -100,9 +100,7 @@ class TestMiddlewarePipelinePassthrough:
         """Sanitization strips shell metacharacters in strict mode."""
         pipeline = MiddlewarePipeline(strict_config)
         schema = {"type": "object", "properties": {"cmd": {"type": "string"}}, "required": ["cmd"]}
-        result = await pipeline.process_tool_request(
-            "tool", {"cmd": "ls; rm -rf /"}, schema, {}
-        )
+        result = await pipeline.process_tool_request("tool", {"cmd": "ls; rm -rf /"}, schema, {})
         assert result.allowed
         # Shell metacharacters should be stripped
         assert result.sanitized_arguments is not None
@@ -130,6 +128,7 @@ class TestMiddlewarePipelineIOLimits:
         )
         pipeline = MiddlewarePipeline(config)
         from mcp_chassis.errors import IOLimitError
+
         with pytest.raises(IOLimitError):
             pipeline.check_response_size("x" * 100)
 
@@ -287,9 +286,7 @@ class TestProcessResourceRequest:
             rate_limits=RateLimitConfig(enabled=False),
         )
         pipeline = MiddlewarePipeline(config)
-        result = await pipeline.process_resource_request(
-            "template://test", {"token": "wrong"}
-        )
+        result = await pipeline.process_resource_request("template://test", {"token": "wrong"})
         assert not result.allowed
         assert result.error_code == "AUTH_ERROR"
 
@@ -300,9 +297,7 @@ class TestProcessResourceRequest:
             rate_limits=RateLimitConfig(enabled=False),
         )
         pipeline = MiddlewarePipeline(config)
-        result = await pipeline.process_resource_request(
-            "template://test", {"token": "secret"}
-        )
+        result = await pipeline.process_resource_request("template://test", {"token": "secret"})
         assert result.allowed
 
     @pytest.mark.asyncio
@@ -505,6 +500,7 @@ class TestReplayPrevention:
             SecurityConfig,
             ValidationConfig,
         )
+
         config = SecurityConfig(
             rate_limits=RateLimitConfig(enabled=False),
             io_limits=IOLimitConfig(max_request_size=1_048_576, max_response_size=5_242_880),
@@ -519,6 +515,7 @@ class TestReplayPrevention:
     async def test_no_timestamp_allowed(self) -> None:
         """No X-Request-Timestamp header (stdio path) → always passes."""
         from mcp_chassis.utils.fss_context import fss_request_timestamp
+
         fss_request_timestamp.set(None)
         pipeline = self._make_pipeline()
         result = pipeline._check_replay()
@@ -527,6 +524,7 @@ class TestReplayPrevention:
     @pytest.mark.asyncio
     async def test_timestamp_within_window_allowed(self) -> None:
         from mcp_chassis.utils.fss_context import fss_request_timestamp
+
         ts = datetime.now(UTC).isoformat()
         fss_request_timestamp.set(ts)
         pipeline = self._make_pipeline(window_seconds=300)
@@ -537,6 +535,7 @@ class TestReplayPrevention:
     @pytest.mark.asyncio
     async def test_timestamp_outside_window_rejected(self) -> None:
         from mcp_chassis.utils.fss_context import fss_request_timestamp
+
         old_ts = (datetime.now(UTC) - timedelta(seconds=400)).isoformat()
         fss_request_timestamp.set(old_ts)
         pipeline = self._make_pipeline(window_seconds=300)
@@ -549,6 +548,7 @@ class TestReplayPrevention:
     @pytest.mark.asyncio
     async def test_future_timestamp_outside_window_rejected(self) -> None:
         from mcp_chassis.utils.fss_context import fss_request_timestamp
+
         future_ts = (datetime.now(UTC) + timedelta(seconds=400)).isoformat()
         fss_request_timestamp.set(future_ts)
         pipeline = self._make_pipeline(window_seconds=300)
@@ -561,6 +561,7 @@ class TestReplayPrevention:
     async def test_invalid_timestamp_format_allowed(self) -> None:
         """Malformed timestamp is logged and ignored, not rejected."""
         from mcp_chassis.utils.fss_context import fss_request_timestamp
+
         fss_request_timestamp.set("not-a-date")
         pipeline = self._make_pipeline()
         result = pipeline._check_replay()
@@ -570,6 +571,7 @@ class TestReplayPrevention:
     @pytest.mark.asyncio
     async def test_replay_window_zero_disables_check(self) -> None:
         from mcp_chassis.utils.fss_context import fss_request_timestamp
+
         old_ts = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
         fss_request_timestamp.set(old_ts)
         pipeline = self._make_pipeline(window_seconds=0)
@@ -581,6 +583,7 @@ class TestReplayPrevention:
     async def test_replay_check_in_process_tool_request(self) -> None:
         """Replay rejection is triggered through the full pipeline."""
         from mcp_chassis.utils.fss_context import fss_request_timestamp
+
         old_ts = (datetime.now(UTC) - timedelta(seconds=400)).isoformat()
         fss_request_timestamp.set(old_ts)
         pipeline = self._make_pipeline(window_seconds=300)
@@ -593,4 +596,3 @@ class TestReplayPrevention:
         assert not result.allowed
         assert result.error_code == "REPLAY_REJECTED"
         fss_request_timestamp.set(None)
-

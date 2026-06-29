@@ -54,7 +54,7 @@ def _check_http_deps() -> None:
     if missing:
         raise ImportError(
             "HTTP transport requires additional dependencies. "
-            "Install them with: pip install -e \".[http]\"\n"
+            'Install them with: pip install -e ".[http]"\n'
             f"Missing: {', '.join(missing)}"
         )
 
@@ -99,7 +99,9 @@ class HTTPTransport(TransportBase):
         self._port_override = port
         self._base_path = base_path
         self._stateless = stateless
-        self._uvicorn_server: object | None = None  # uvicorn.Server, typed as object to avoid import  # noqa: E501
+        self._uvicorn_server: object | None = (
+            None  # uvicorn.Server, typed as object to avoid import  # noqa: E501
+        )
 
     def _resolve_host(self, server: ChassisServer) -> str:
         """Resolve the bind address in priority order.
@@ -138,7 +140,9 @@ class HTTPTransport(TransportBase):
             try:
                 return int(env_port)
             except ValueError:
-                logger.warning("Invalid MCP_PORT value '%s', using default %d", env_port, _DEFAULT_PORT)  # noqa: E501
+                logger.warning(
+                    "Invalid MCP_PORT value '%s', using default %d", env_port, _DEFAULT_PORT
+                )  # noqa: E501
         return _DEFAULT_PORT
 
     def _resolve_cors_origins(self) -> list[str]:
@@ -180,7 +184,7 @@ class HTTPTransport(TransportBase):
         # Session manager wraps the SDK low-level server
         session_manager = StreamableHTTPSessionManager(
             app=server._sdk_server,
-            event_store=None,   # No resumability for now; add an event store later
+            event_store=None,  # No resumability for now; add an event store later
             json_response=False,  # Use SSE streams (spec-compliant)
             stateless=self._stateless,
         )
@@ -189,9 +193,7 @@ class HTTPTransport(TransportBase):
         async def lifespan(app: Starlette) -> AsyncIterator[None]:  # type: ignore[type-arg]
             logger.info("Starting MCP HTTP session manager")
             async with session_manager.run():
-                logger.info(
-                    "MCP HTTP server ready: http://%s:%d%s", host, port, self._base_path
-                )
+                logger.info("MCP HTTP server ready: http://%s:%d%s", host, port, self._base_path)
                 yield
             logger.info("MCP HTTP session manager stopped")
 
@@ -246,11 +248,13 @@ class HTTPTransport(TransportBase):
                 JSON response with server status.
             """
             await _extract_fss_headers(request)
-            return JSONResponse({
-                "status": "ok",
-                "name": server_name,
-                "version": server_version,
-            })
+            return JSONResponse(
+                {
+                    "status": "ok",
+                    "name": server_name,
+                    "version": server_version,
+                }
+            )
 
         async def readiness_check(request: Request) -> JSONResponse:
             """Readiness check endpoint for Kubernetes readiness probes.
@@ -262,11 +266,13 @@ class HTTPTransport(TransportBase):
                 JSON response with server readiness status.
             """
             await _extract_fss_headers(request)
-            return JSONResponse({
-                "status": "ok",
-                "name": server_name,
-                "version": server_version,
-            })
+            return JSONResponse(
+                {
+                    "status": "ok",
+                    "name": server_name,
+                    "version": server_version,
+                }
+            )
 
         async def mcp_handler(scope: object, receive: object, send: object) -> None:
             """MCP endpoint — wraps the session manager to extract FSS headers.
@@ -303,6 +309,7 @@ class HTTPTransport(TransportBase):
 
                 # Extract bearer token for auth middleware
                 from mcp_chassis.utils.fss_context import fss_auth_token
+
                 auth_header = headers_dict.get("authorization", "")
                 if auth_header.lower().startswith("bearer "):
                     fss_auth_token.set(auth_header[7:].strip())
@@ -329,10 +336,9 @@ class HTTPTransport(TransportBase):
         class _BearerTokenMiddleware(BaseHTTPMiddleware):
             """Extract Authorization: Bearer <token> and store in fss_auth_token."""
 
-            async def dispatch(
-                self, request: Request, call_next: object
-            ) -> StarletteResponse:
+            async def dispatch(self, request: Request, call_next: object) -> StarletteResponse:
                 from mcp_chassis.utils.fss_context import fss_auth_token
+
                 auth = request.headers.get("authorization", "")
                 if auth.lower().startswith("bearer "):
                     fss_auth_token.set(auth[7:].strip())
@@ -391,7 +397,11 @@ class HTTPTransport(TransportBase):
         # Compatibility: honour MCP_TRANSPORT env var if set, but we are already
         # in the HTTP transport so just log it rather than re-routing.
         mcp_transport_env = os.environ.get("MCP_TRANSPORT")
-        if mcp_transport_env and mcp_transport_env.lower() not in ("http", "streamable-http", "sse"):  # noqa: E501
+        if mcp_transport_env and mcp_transport_env.lower() not in (
+            "http",
+            "streamable-http",
+            "sse",
+        ):  # noqa: E501
             logger.warning(
                 "MCP_TRANSPORT env var is '%s' but HTTP transport was explicitly selected; "
                 "proceeding with HTTP.",
@@ -402,9 +412,7 @@ class HTTPTransport(TransportBase):
         port = self._resolve_port(server)
 
         logger.info("Starting HTTP transport on %s:%d", host, port)
-        logger.info(
-            "MCP endpoint: http://%s:%d%s", host, port, self._base_path
-        )
+        logger.info("MCP endpoint: http://%s:%d%s", host, port, self._base_path)
         logger.info("Health check: http://%s:%d/health", host, port)
 
         app = self._build_app(server, host, port)

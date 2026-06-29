@@ -23,20 +23,21 @@ logger = logging.getLogger(__name__)
 
 # ── Status tool (always registered, even on degraded startup) ──────────
 
+
 def _register_status_tool(server: ChassisServer) -> None:
     """Register solveit_status — always available, even if KB failed."""
     kb = getattr(server, "_kb", None)
     kb_error = getattr(server, "_kb_error", None)
 
-    async def _handle(
-        arguments: dict[str, Any], context: HandlerContext
-    ) -> str:
+    async def _handle(arguments: dict[str, Any], context: HandlerContext) -> str:
         await context.log_debug("solveit_status called")
         if kb is None:
-            return json.dumps({
-                "status": "error",
-                "error": kb_error or "Knowledge base not loaded",
-            })
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": kb_error or "Knowledge base not loaded",
+                }
+            )
         report: dict[str, Any] = {
             "status": "ok",
             "techniques": len(kb.list_techniques()),
@@ -63,12 +64,11 @@ def _register_status_tool(server: ChassisServer) -> None:
 
 # ── Database description tool ──────────────────────────────────────────
 
+
 def _register_database_description_tool(server: ChassisServer, kb: Any) -> None:
     """Register solveit_get_database_description — orientation tool."""
 
-    async def _handle(
-        arguments: dict[str, Any], context: HandlerContext
-    ) -> str:
+    async def _handle(arguments: dict[str, Any], context: HandlerContext) -> str:
         await context.log_debug("solveit_get_database_description called")
         try:
             mappings: list[str] = []
@@ -88,17 +88,12 @@ def _register_database_description_tool(server: ChassisServer, kb: Any) -> None:
                 ),
                 "entity_types": {
                     "techniques": (
-                        "Digital forensic investigation methods "
-                        "(DFT-1001, DFT-1002, …)"
+                        "Digital forensic investigation methods (DFT-1001, DFT-1002, …)"
                     ),
                     "weaknesses": (
-                        "Potential problems or limitations of techniques "
-                        "(DFW-1001, DFW-1002, …)"
+                        "Potential problems or limitations of techniques (DFW-1001, DFW-1002, …)"
                     ),
-                    "mitigations": (
-                        "Ways to address weaknesses "
-                        "(DFM-1001, DFM-1002, …)"
-                    ),
+                    "mitigations": ("Ways to address weaknesses (DFM-1001, DFM-1002, …)"),
                     "objectives": (
                         "Investigation workflow phases that group techniques "
                         "(e.g. 'Acquire data', 'Preserve digital evidence')"
@@ -472,27 +467,20 @@ def _register_relationship_tools(server: ChassisServer, kb: Any) -> None:
 
 # ── Cross-traversal shortcut ───────────────────────────────────────────
 
-def _register_mitigations_for_technique_tool(
-    server: ChassisServer, kb: Any
-) -> None:
+
+def _register_mitigations_for_technique_tool(server: ChassisServer, kb: Any) -> None:
     """Register solveit_get_mitigations_for_technique."""
 
-    async def _handle(
-        arguments: dict[str, Any], context: HandlerContext
-    ) -> str:
+    async def _handle(arguments: dict[str, Any], context: HandlerContext) -> str:
         await context.log_debug("solveit_get_mitigations_for_technique called")
         technique_id = arguments["technique_id"]
         try:
             if kb.get_technique(technique_id) is None:
                 return json.dumps({"error": "not_found", "id": technique_id})
             mitigation_ids = kb.get_mit_list_for_technique(technique_id)
-            return json.dumps(
-                {"technique_id": technique_id, "mitigations": mitigation_ids}
-            )
+            return json.dumps({"technique_id": technique_id, "mitigations": mitigation_ids})
         except Exception as exc:
-            return json.dumps(
-                {"error": f"Failed to retrieve mitigations for technique: {exc}"}
-            )
+            return json.dumps({"error": f"Failed to retrieve mitigations for technique: {exc}"})
 
     server.register_tool(
         name="solveit_get_mitigations_for_technique",
@@ -526,24 +514,19 @@ def _register_mitigations_for_technique_tool(
 
 # ── Objective / mapping tools ──────────────────────────────────────────
 
-def _register_objectives_and_mapping_tools(
-    server: ChassisServer, kb: Any
-) -> None:
+
+def _register_objectives_and_mapping_tools(server: ChassisServer, kb: Any) -> None:
     """Register reverse-objective lookup and mapping switch tools."""
 
     # solveit_get_objectives_for_technique
-    async def _handle_obj_for_tech(
-        arguments: dict[str, Any], context: HandlerContext
-    ) -> str:
+    async def _handle_obj_for_tech(arguments: dict[str, Any], context: HandlerContext) -> str:
         await context.log_debug("solveit_get_objectives_for_technique called")
         technique_id = arguments["technique_id"]
         try:
             objectives = kb.get_objectives_for_technique(technique_id)
             return json.dumps(objectives)
         except Exception as exc:
-            return json.dumps(
-                {"error": f"Failed to retrieve objectives for technique: {exc}"}
-            )
+            return json.dumps({"error": f"Failed to retrieve objectives for technique: {exc}"})
 
     server.register_tool(
         name="solveit_get_objectives_for_technique",
@@ -579,9 +562,7 @@ def _register_objectives_and_mapping_tools(
     )
 
     # solveit_list_available_mappings
-    async def _handle_list_mappings(
-        arguments: dict[str, Any], context: HandlerContext
-    ) -> str:
+    async def _handle_list_mappings(arguments: dict[str, Any], context: HandlerContext) -> str:
         await context.log_debug("solveit_list_available_mappings called")
         try:
             mappings = kb.list_available_mappings()
@@ -609,25 +590,27 @@ def _register_objectives_and_mapping_tools(
     )
 
     # solveit_load_objective_mapping
-    async def _handle_load_mapping(
-        arguments: dict[str, Any], context: HandlerContext
-    ) -> str:
+    async def _handle_load_mapping(arguments: dict[str, Any], context: HandlerContext) -> str:
         await context.log_debug("solveit_load_objective_mapping called")
         filename = arguments["filename"]
         try:
             success = kb.load_objective_mapping(filename)
             current = getattr(kb, "current_mapping_name", filename)
             if success:
-                return json.dumps({
-                    "success": True,
-                    "message": f"Successfully loaded mapping: {filename}",
+                return json.dumps(
+                    {
+                        "success": True,
+                        "message": f"Successfully loaded mapping: {filename}",
+                        "current_mapping": current,
+                    }
+                )
+            return json.dumps(
+                {
+                    "success": False,
+                    "message": f"Failed to load mapping: {filename}",
                     "current_mapping": current,
-                })
-            return json.dumps({
-                "success": False,
-                "message": f"Failed to load mapping: {filename}",
-                "current_mapping": current,
-            })
+                }
+            )
         except Exception as exc:
             return json.dumps({"error": f"Failed to load mapping: {exc}"})
 
@@ -705,10 +688,7 @@ def _register_search_tool(server: ChassisServer, kb: Any) -> None:
                 "type": "string",
                 "enum": ["techniques", "weaknesses", "mitigations"],
             },
-            "description": (
-                "Filter results to specific types. "
-                "Default: all types are searched."
-            ),
+            "description": ("Filter results to specific types. Default: all types are searched."),
         }
 
     if search_config.get("enable_substring_match", True):
@@ -732,9 +712,7 @@ def _register_search_tool(server: ChassisServer, kb: Any) -> None:
             ),
         }
 
-    async def _handle(
-        arguments: dict[str, Any], context: HandlerContext
-    ) -> str:
+    async def _handle(arguments: dict[str, Any], context: HandlerContext) -> str:
         await context.log_debug("solveit_search called")
         keywords = arguments["keywords"]
         item_types = arguments.get("item_types")
@@ -742,11 +720,11 @@ def _register_search_tool(server: ChassisServer, kb: Any) -> None:
         search_logic = arguments.get("search_logic", "AND")
 
         if search_logic not in _VALID_SEARCH_LOGIC:
-            return json.dumps({
-                "error": (
-                    f"Invalid search_logic '{search_logic}'. Must be AND or OR."
-                ),
-            })
+            return json.dumps(
+                {
+                    "error": (f"Invalid search_logic '{search_logic}'. Must be AND or OR."),
+                }
+            )
 
         result = kb.search(
             keywords=keywords,
@@ -836,12 +814,11 @@ def _register_full_detail_tools(server: ChassisServer, kb: Any) -> None:
 
 # ── Extension info tool ────────────────────────────────────────────────
 
+
 def _register_extension_info_tool(server: ChassisServer, kb: Any) -> None:
     """Register solveit_list_loaded_extensions."""
 
-    async def _handle(
-        arguments: dict[str, Any], context: HandlerContext
-    ) -> str:
+    async def _handle(arguments: dict[str, Any], context: HandlerContext) -> str:
         await context.log_debug("solveit_list_loaded_extensions called")
         return json.dumps(kb.list_loaded_extensions())
 
@@ -861,12 +838,11 @@ def _register_extension_info_tool(server: ChassisServer, kb: Any) -> None:
 
 # ── Citation tools ─────────────────────────────────────────────────────
 
+
 def _register_citation_tools(server: ChassisServer, kb: Any) -> None:
     """Register citation lookup, listing, and inline-resolution tools."""
 
-    async def _handle_get(
-        arguments: dict[str, Any], context: HandlerContext
-    ) -> str:
+    async def _handle_get(arguments: dict[str, Any], context: HandlerContext) -> str:
         await context.log_debug("solveit_get_citation called")
         citation_id = arguments["citation_id"]
         citation = kb.get_citation(citation_id)
@@ -907,9 +883,7 @@ def _register_citation_tools(server: ChassisServer, kb: Any) -> None:
         handler=_handle_get,
     )
 
-    async def _handle_list(
-        arguments: dict[str, Any], context: HandlerContext
-    ) -> str:
+    async def _handle_list(arguments: dict[str, Any], context: HandlerContext) -> str:
         await context.log_debug("solveit_list_citations called")
         return json.dumps([{"id": cid} for cid in sorted(kb.citations)])
 
@@ -930,18 +904,14 @@ def _register_citation_tools(server: ChassisServer, kb: Any) -> None:
         handler=_handle_list,
     )
 
-    async def _handle_resolve(
-        arguments: dict[str, Any], context: HandlerContext
-    ) -> str:
+    async def _handle_resolve(arguments: dict[str, Any], context: HandlerContext) -> str:
         await context.log_debug("solveit_resolve_inline_citations called")
         text = arguments["text"]
         try:
             resolved = kb.resolve_inline_citations(text)
             return json.dumps({"resolved_text": resolved})
         except Exception as exc:
-            return json.dumps(
-                {"error": f"Failed to resolve inline citations: {exc}"}
-            )
+            return json.dumps({"error": f"Failed to resolve inline citations: {exc}"})
 
     server.register_tool(
         name="solveit_resolve_inline_citations",
@@ -980,6 +950,7 @@ def _register_citation_tools(server: ChassisServer, kb: Any) -> None:
 
 
 # ── Entry point ────────────────────────────────────────────────────────
+
 
 def register(server: ChassisServer) -> None:
     """Register all SOLVE-IT tools.
@@ -1020,7 +991,8 @@ def register(server: ChassisServer) -> None:
 
     # Full-detail tools (3, config-gated — large payloads)
     enable_full_detail = (
-        app_cfg.enable_full_detail_tools if app_cfg is not None
+        app_cfg.enable_full_detail_tools
+        if app_cfg is not None
         else server._config.app.get("enable_full_detail_tools", False)
     )
     if enable_full_detail:

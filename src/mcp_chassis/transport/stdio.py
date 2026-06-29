@@ -47,9 +47,7 @@ class StdioTransport(TransportBase):
         self._max_line_bytes = max_line_bytes
         self._cancel_scope: anyio.CancelScope | None = None
 
-    async def _read_lines_bounded(
-        self, reader: object
-    ) -> AsyncIterator[bytes]:
+    async def _read_lines_bounded(self, reader: object) -> AsyncIterator[bytes]:
         """Read lines from a binary stream, enforcing a per-line byte limit.
 
         Reads in fixed-size chunks and assembles lines delimited by b'\\n'.
@@ -152,9 +150,7 @@ class StdioTransport(TransportBase):
                 async with read_stream_writer:
                     async for line_bytes in self._read_lines_bounded(stdin_raw):
                         try:
-                            message = types.JSONRPCMessage.model_validate_json(
-                                line_bytes
-                            )
+                            message = types.JSONRPCMessage.model_validate_json(line_bytes)
                         except Exception as exc:
                             await read_stream_writer.send(exc)
                             continue

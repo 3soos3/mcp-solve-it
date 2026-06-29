@@ -10,9 +10,7 @@ import pytest
 
 from mcp_chassis.extensions.solveit_init import on_init
 
-_SOLVEIT_PATH = str(
-    (Path(__file__).resolve().parents[3] / "solve-it" / "solve-it-main").resolve()
-)
+_SOLVEIT_PATH = str((Path(__file__).resolve().parents[3] / "solve-it" / "solve-it-main").resolve())
 
 
 def _make_server(app_config: dict | None = None) -> MagicMock:
@@ -50,10 +48,12 @@ class TestOnInitSuccess:
         assert server._kb_error is None
 
     def test_custom_objective_mapping(self) -> None:
-        server = _make_server({
-            "solveit_data_path": _SOLVEIT_PATH,
-            "objective_mapping": "solve-it.json",
-        })
+        server = _make_server(
+            {
+                "solveit_data_path": _SOLVEIT_PATH,
+                "objective_mapping": "solve-it.json",
+            }
+        )
         on_init(server)
         assert server._kb is not None
 
@@ -62,32 +62,39 @@ class TestOnInitFailureDegradedMode:
     """Tests for KB load failure with init_required=False (degraded mode)."""
 
     def test_bad_path_sets_kb_none(self) -> None:
-        server = _make_server({
-            "solveit_data_path": "/nonexistent/path",
-            "init_required": False,
-        })
+        server = _make_server(
+            {
+                "solveit_data_path": "/nonexistent/path",
+                "init_required": False,
+            }
+        )
         on_init(server)
         assert server._kb is None
 
     def test_bad_path_sets_error_message(self) -> None:
-        server = _make_server({
-            "solveit_data_path": "/nonexistent/path",
-            "init_required": False,
-        })
+        server = _make_server(
+            {
+                "solveit_data_path": "/nonexistent/path",
+                "init_required": False,
+            }
+        )
         on_init(server)
         assert server._kb_error is not None
         assert isinstance(server._kb_error, str)
         assert len(server._kb_error) > 0
 
     def test_bad_path_logs_error(self, caplog: pytest.LogCaptureFixture) -> None:
-        server = _make_server({
-            "solveit_data_path": "/nonexistent/path",
-            "init_required": False,
-        })
+        server = _make_server(
+            {
+                "solveit_data_path": "/nonexistent/path",
+                "init_required": False,
+            }
+        )
         with caplog.at_level(logging.ERROR):
             on_init(server)
-        assert any("failed" in r.message.lower() or "error" in r.message.lower()
-                    for r in caplog.records)
+        assert any(
+            "failed" in r.message.lower() or "error" in r.message.lower() for r in caplog.records
+        )
 
 
 class TestOnInitFailureRequired:
@@ -100,10 +107,12 @@ class TestOnInitFailureRequired:
         assert exc_info.value.code == 1
 
     def test_bad_path_exits_with_explicit_true(self) -> None:
-        server = _make_server({
-            "solveit_data_path": "/nonexistent/path",
-            "init_required": True,
-        })
+        server = _make_server(
+            {
+                "solveit_data_path": "/nonexistent/path",
+                "init_required": True,
+            }
+        )
         with pytest.raises(SystemExit) as exc_info:
             on_init(server)
         assert exc_info.value.code == 1
@@ -135,28 +144,34 @@ class TestEnvVarOverrides:
     def test_env_overrides_init_required(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MCP_APP_INIT_REQUIRED", "false")
         # Bad path + init_required=true in TOML, but env var sets false
-        server = _make_server({
-            "solveit_data_path": "/nonexistent/path",
-            "init_required": True,
-        })
+        server = _make_server(
+            {
+                "solveit_data_path": "/nonexistent/path",
+                "init_required": True,
+            }
+        )
         on_init(server)  # should NOT exit because env var overrides to false
         assert server._kb is None
 
     def test_env_override_bool_true_variants(self, monkeypatch: pytest.MonkeyPatch) -> None:
         for truthy in ("true", "True", "TRUE", "1", "yes"):
             monkeypatch.setenv("MCP_APP_INIT_REQUIRED", truthy)
-            server = _make_server({
-                "solveit_data_path": "/nonexistent/path",
-            })
+            server = _make_server(
+                {
+                    "solveit_data_path": "/nonexistent/path",
+                }
+            )
             with pytest.raises(SystemExit):
                 on_init(server)
 
     def test_env_override_bool_false_variants(self, monkeypatch: pytest.MonkeyPatch) -> None:
         for falsy in ("false", "False", "FALSE", "0", "no"):
             monkeypatch.setenv("MCP_APP_INIT_REQUIRED", falsy)
-            server = _make_server({
-                "solveit_data_path": "/nonexistent/path",
-            })
+            server = _make_server(
+                {
+                    "solveit_data_path": "/nonexistent/path",
+                }
+            )
             on_init(server)  # should not exit
             assert server._kb is None
 
@@ -176,13 +191,13 @@ class TestTypedConfig:
         assert hasattr(server, "_app_config")
         assert server._app_config.solveit_data_path == _SOLVEIT_PATH
 
-    def test_unrecognized_key_logs_warning(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        server = _make_server({
-            "solveit_data_path": _SOLVEIT_PATH,
-            "solvit_data_paht": "/typo",  # intentional typo
-        })
+    def test_unrecognized_key_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        server = _make_server(
+            {
+                "solveit_data_path": _SOLVEIT_PATH,
+                "solvit_data_paht": "/typo",  # intentional typo
+            }
+        )
         with caplog.at_level(logging.WARNING):
             on_init(server)
         assert any("solvit_data_paht" in r.message for r in caplog.records)
@@ -204,13 +219,15 @@ class TestTypedConfig:
         assert server._app_config.search.enable_search_logic is True
 
     def test_search_config_overrides(self) -> None:
-        server = _make_server({
-            "solveit_data_path": _SOLVEIT_PATH,
-            "search": {
-                "enable_item_types_filter": False,
-                "enable_substring_match": False,
-            },
-        })
+        server = _make_server(
+            {
+                "solveit_data_path": _SOLVEIT_PATH,
+                "search": {
+                    "enable_item_types_filter": False,
+                    "enable_substring_match": False,
+                },
+            }
+        )
         on_init(server)
         assert server._app_config.search.enable_item_types_filter is False
         assert server._app_config.search.enable_substring_match is False
@@ -224,9 +241,11 @@ class TestOnInitExtensions:
         assert server._kb is not None
 
     def test_extensions_disabled(self) -> None:
-        server = _make_server({
-            "solveit_data_path": _SOLVEIT_PATH,
-            "enable_extensions": False,
-        })
+        server = _make_server(
+            {
+                "solveit_data_path": _SOLVEIT_PATH,
+                "enable_extensions": False,
+            }
+        )
         on_init(server)
         assert server._kb is not None

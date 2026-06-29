@@ -28,9 +28,7 @@ class TelemetryManager:
     """
 
     def __init__(self) -> None:
-        self.enabled = os.environ.get("MCP_OTEL_ENABLED", "").lower() in (
-            "1", "true", "yes"
-        )
+        self.enabled = os.environ.get("MCP_OTEL_ENABLED", "").lower() in ("1", "true", "yes")
         self._tracer: Any = None
         self._meter: Any = None
 
@@ -56,11 +54,13 @@ class TelemetryManager:
             from opentelemetry.sdk.trace import TracerProvider
             from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-            resource = Resource.create({
-                "service.name": service_name,
-                "service.version": os.environ.get("SOLVE_IT_VERSION", "unknown"),
-                "deployment.environment": environment,
-            })
+            resource = Resource.create(
+                {
+                    "service.name": service_name,
+                    "service.version": os.environ.get("SOLVE_IT_VERSION", "unknown"),
+                    "deployment.environment": environment,
+                }
+            )
 
             tracer_provider = TracerProvider(resource=resource)
             tracer_provider.add_span_processor(
@@ -78,7 +78,9 @@ class TelemetryManager:
 
             logger.info(
                 "OpenTelemetry initialised (service=%s, endpoint=%s, env=%s)",
-                service_name, endpoint, environment,
+                service_name,
+                endpoint,
+                environment,
             )
 
         except ImportError as exc:
@@ -110,6 +112,7 @@ class TelemetryManager:
             return
         try:
             from opentelemetry import metrics, trace
+
             tp = trace.get_tracer_provider()
             if hasattr(tp, "shutdown"):
                 tp.shutdown()

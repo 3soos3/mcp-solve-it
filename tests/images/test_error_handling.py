@@ -22,7 +22,8 @@ def _is_error_payload(data: dict) -> bool:
         data.get("_is_tool_error") is True
         or "error" in data
         or "_error" in data
-        or "status" in data and data["status"] == "error"
+        or "status" in data
+        and data["status"] == "error"
     )
 
 
@@ -35,10 +36,10 @@ class TestInvalidIDs:
     ) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_get_technique", {"technique_id": "DFT-9999"})
-        assert "_error" not in data or data.get("_is_tool_error"), \
+        assert "_error" not in data or data.get("_is_tool_error"), (
             f"Transport error (not an application error): {data}"
-        assert _is_error_payload(data), \
-            f"Expected error for DFT-9999, got: {data}"
+        )
+        assert _is_error_payload(data), f"Expected error for DFT-9999, got: {data}"
 
     @pytest.mark.parametrize("fixture_name", ["monthly", "version"])
     def test_nonexistent_weakness_returns_error(
@@ -72,8 +73,9 @@ class TestInvalidIDs:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         client.call_tool("solveit_get_technique", {"technique_id": "DFT-9999"})
         ok = client.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
-        assert isinstance(ok.get("name"), str) and ok.get("name"), \
+        assert isinstance(ok.get("name"), str) and ok.get("name"), (
             f"Server unresponsive after bad-ID call: {ok}"
+        )
 
 
 class TestUnknownTool:
@@ -83,20 +85,20 @@ class TestUnknownTool:
     ) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_does_not_exist_xyz")
-        assert client.is_tool_not_found(data) or data.get("_is_tool_error"), \
+        assert client.is_tool_not_found(data) or data.get("_is_tool_error"), (
             f"Expected TOOL_NOT_FOUND, got: {data}"
+        )
 
 
 class TestMissingRequiredArguments:
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
-    def test_missing_technique_id(
-        self, fixture_name: str, request: pytest.FixtureRequest
-    ) -> None:
+    def test_missing_technique_id(self, fixture_name: str, request: pytest.FixtureRequest) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         # Call without the required technique_id argument
         data = client.call_tool("solveit_get_technique", {})
-        assert _is_error_payload(data), \
+        assert _is_error_payload(data), (
             f"Expected validation error for missing technique_id, got: {data}"
+        )
 
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
     def test_missing_search_keywords(
@@ -104,8 +106,7 @@ class TestMissingRequiredArguments:
     ) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_search", {})
-        assert _is_error_payload(data), \
-            f"Expected error for empty solveit_search args, got: {data}"
+        assert _is_error_payload(data), f"Expected error for empty solveit_search args, got: {data}"
 
 
 class TestSearchEdgeCases:
@@ -138,9 +139,11 @@ class TestSearchEdgeCases:
             "solveit_search",
             {"keywords": "'; DROP TABLE techniques; --"},
         )
-        assert "_error" not in data or data.get("_is_tool_error") or \
-               "parse failed" in str(data.get("_error", "")), \
-               f"Server appears to have crashed on SQL injection attempt: {data}"
+        assert (
+            "_error" not in data
+            or data.get("_is_tool_error")
+            or "parse failed" in str(data.get("_error", ""))
+        ), f"Server appears to have crashed on SQL injection attempt: {data}"
 
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
     def test_search_unicode_does_not_crash(
@@ -148,9 +151,11 @@ class TestSearchEdgeCases:
     ) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_search", {"keywords": "数字取证 forensic"})
-        assert "_error" not in data or data.get("_is_tool_error") or \
-               "parse failed" in str(data.get("_error", "")), \
-               f"Server crashed on unicode search: {data}"
+        assert (
+            "_error" not in data
+            or data.get("_is_tool_error")
+            or "parse failed" in str(data.get("_error", ""))
+        ), f"Server crashed on unicode search: {data}"
 
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
     def test_very_long_keyword_handled(
@@ -161,9 +166,11 @@ class TestSearchEdgeCases:
         long_kw = "forensic " * 500  # ~4500 chars, under the 10000 limit
         data = client.call_tool("solveit_search", {"keywords": long_kw})
         # Either valid results or a validation/error — but not a transport failure
-        assert "_error" not in data or data.get("_is_tool_error") or \
-               "parse failed" in str(data.get("_error", "")), \
-               f"Server crashed on long keyword: {str(data)[:100]}"
+        assert (
+            "_error" not in data
+            or data.get("_is_tool_error")
+            or "parse failed" in str(data.get("_error", ""))
+        ), f"Server crashed on long keyword: {str(data)[:100]}"
 
 
 class TestWrongArgumentType:
@@ -173,8 +180,7 @@ class TestWrongArgumentType:
     ) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_search", {"keywords": 42})
-        assert _is_error_payload(data), \
-            f"Expected validation error for int keywords, got: {data}"
+        assert _is_error_payload(data), f"Expected validation error for int keywords, got: {data}"
 
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
     def test_null_where_string_expected(
@@ -182,5 +188,6 @@ class TestWrongArgumentType:
     ) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_get_technique", {"technique_id": None})
-        assert _is_error_payload(data), \
+        assert _is_error_payload(data), (
             f"Expected validation error for null technique_id, got: {data}"
+        )

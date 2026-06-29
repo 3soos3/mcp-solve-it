@@ -32,6 +32,7 @@ pytestmark = pytest.mark.crypto
 
 # ── Format tests ──────────────────────────────────────────────────────────────
 
+
 class TestCAIFormat:
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
     def test_parameters_cai_length_is_73(
@@ -70,22 +71,23 @@ class TestCAIFormat:
         for field in ("parameters_cai", "artifact_id"):
             hex_part = cai_hex(p.get(field, ""))
             assert len(hex_part) == 64, f"{fixture_name}.{field}: hex part length {len(hex_part)}"
-            assert all(c in "0123456789abcdef" for c in hex_part), \
+            assert all(c in "0123456789abcdef" for c in hex_part), (
                 f"{fixture_name}.{field}: non-hex character in digest: {hex_part[:16]}"
+            )
 
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
-    def test_all_cai_fields_valid(
-        self, fixture_name: str, request: pytest.FixtureRequest
-    ) -> None:
+    def test_all_cai_fields_valid(self, fixture_name: str, request: pytest.FixtureRequest) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
         p = client.prov(data)
         for field in ("parameters_cai", "artifact_id"):
-            assert is_valid_cai(p.get(field, "")), \
+            assert is_valid_cai(p.get(field, "")), (
                 f"{fixture_name}: invalid CAI in {field!r}: {p.get(field)!r}"
+            )
 
 
 # ── Determinism tests ─────────────────────────────────────────────────────────
+
 
 class TestDeterminism:
     def test_parameters_cai_same_for_same_inputs(self, version: PodmanMCPClient) -> None:
@@ -95,8 +97,7 @@ class TestDeterminism:
         b = version.prov(
             version.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
         ).get("parameters_cai")
-        assert a and b and a == b, \
-            f"parameters_cai not deterministic: {a} != {b}"
+        assert a and b and a == b, f"parameters_cai not deterministic: {a} != {b}"
 
     def test_artifact_id_same_for_same_inputs(self, version: PodmanMCPClient) -> None:
         a = version.prov(
@@ -105,62 +106,55 @@ class TestDeterminism:
         b = version.prov(
             version.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
         ).get("artifact_id")
-        assert a and b and a == b, \
-            f"artifact_id not deterministic in :version: {a} != {b}"
+        assert a and b and a == b, f"artifact_id not deterministic in :version: {a} != {b}"
 
     def test_kb_version_id_stable_across_calls(self, version: PodmanMCPClient) -> None:
         a = version.prov(version.call_tool("solveit_status")).get("kb_version_id")
         b = version.prov(
             version.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
         ).get("kb_version_id")
-        c = version.prov(
-            version.call_tool("solveit_search", {"keywords": "triage"})
-        ).get("kb_version_id")
-        assert a == b == c and a, \
-            f"kb_version_id not stable: {a}, {b}, {c}"
+        c = version.prov(version.call_tool("solveit_search", {"keywords": "triage"})).get(
+            "kb_version_id"
+        )
+        assert a == b == c and a, f"kb_version_id not stable: {a}, {b}, {c}"
 
 
 # ── Uniqueness tests ──────────────────────────────────────────────────────────
 
+
 class TestUniqueness:
-    def test_different_params_different_parameters_cai(
-        self, version: PodmanMCPClient
-    ) -> None:
+    def test_different_params_different_parameters_cai(self, version: PodmanMCPClient) -> None:
         a = version.prov(
             version.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
         ).get("parameters_cai")
         b = version.prov(
             version.call_tool("solveit_get_technique", {"technique_id": "DFT-1002"})
         ).get("parameters_cai")
-        assert a and b and a != b, \
+        assert a and b and a != b, (
             "Different technique_id inputs must produce different parameters_cai"
+        )
 
-    def test_different_tools_different_parameters_cai(
-        self, version: PodmanMCPClient
-    ) -> None:
+    def test_different_tools_different_parameters_cai(self, version: PodmanMCPClient) -> None:
         a = version.prov(
             version.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
         ).get("parameters_cai")
         b = version.prov(
             version.call_tool("solveit_get_weakness", {"weakness_id": "DFW-1001"})
         ).get("parameters_cai")
-        assert a and b and a != b, \
-            "Different tool calls should produce different parameters_cai"
+        assert a and b and a != b, "Different tool calls should produce different parameters_cai"
 
-    def test_different_results_different_artifact_ids(
-        self, version: PodmanMCPClient
-    ) -> None:
+    def test_different_results_different_artifact_ids(self, version: PodmanMCPClient) -> None:
         a = version.prov(
             version.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
         ).get("artifact_id")
         b = version.prov(
             version.call_tool("solveit_get_technique", {"technique_id": "DFT-1002"})
         ).get("artifact_id")
-        assert a and b and a != b, \
-            "Different results must produce different artifact_ids"
+        assert a and b and a != b, "Different results must produce different artifact_ids"
 
 
 # ── Internal consistency tests ────────────────────────────────────────────────
+
 
 class TestInternalConsistency:
     @pytest.mark.parametrize("fixture_name", ["monthly", "version"])
@@ -170,20 +164,21 @@ class TestInternalConsistency:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_search", {"keywords": "triage"})
         p = client.prov(data)
-        assert p.get("artifact_id") == p.get("result_cai") is not None, \
-            f"{fixture_name}: artifact_id ({p.get('artifact_id')!r}) != " \
+        assert p.get("artifact_id") == p.get("result_cai") is not None, (
+            f"{fixture_name}: artifact_id ({p.get('artifact_id')!r}) != "
             f"result_cai ({p.get('result_cai')!r})"
+        )
 
-    def test_transaction_id_not_same_as_artifact_id(
-        self, version: PodmanMCPClient
-    ) -> None:
+    def test_transaction_id_not_same_as_artifact_id(self, version: PodmanMCPClient) -> None:
         data = version.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
         p = version.prov(data)
-        assert p.get("transaction_id") != p.get("artifact_id"), \
+        assert p.get("transaction_id") != p.get("artifact_id"), (
             "transaction_id and artifact_id must be distinct identifiers"
+        )
 
 
 # ── Pre-image verification tests ──────────────────────────────────────────────
+
 
 class TestPreImageVerification:
     """Attempt to recompute CAI values from known inputs.
@@ -198,9 +193,7 @@ class TestPreImageVerification:
         canonical = json.dumps(params, sort_keys=True, separators=(",", ":"))
         return sha2_256_cai(canonical.encode("utf-8"))
 
-    def test_parameters_cai_matches_computed_hash(
-        self, version: PodmanMCPClient
-    ) -> None:
+    def test_parameters_cai_matches_computed_hash(self, version: PodmanMCPClient) -> None:
         params = {"technique_id": "DFT-1001"}
         data = version.call_tool("solveit_get_technique", params)
         actual_cai = version.prov(data).get("parameters_cai", "")

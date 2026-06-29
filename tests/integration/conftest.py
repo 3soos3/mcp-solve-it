@@ -115,9 +115,7 @@ class MCPTestClient:
         self._process.stdin.write((msg + "\n").encode())
         await self._process.stdin.drain()
 
-    async def _send_and_receive(
-        self, message: dict[str, Any], expected_id: int
-    ) -> dict[str, Any]:
+    async def _send_and_receive(self, message: dict[str, Any], expected_id: int) -> dict[str, Any]:
         """Send a message and read the response with the matching ID."""
         if self._process is None or self._process.stdin is None or self._process.stdout is None:
             raise RuntimeError("Process not started")

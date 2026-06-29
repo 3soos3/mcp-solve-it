@@ -67,6 +67,7 @@ class TestSecurityLogger:
     def reset_security_logger(self) -> None:
         """Reset the module-level singleton between tests."""
         import mcp_chassis.logging_config as lc
+
         original = lc._security_logger
         lc._security_logger = None
         yield
@@ -74,17 +75,20 @@ class TestSecurityLogger:
 
     def test_get_security_logger_returns_logger(self) -> None:
         from mcp_chassis.logging_config import get_security_logger
+
         logger = get_security_logger()
         assert isinstance(logger, logging.Logger)
         assert logger.name == "mcp_chassis.security"
 
     def test_security_logger_does_not_propagate(self) -> None:
         from mcp_chassis.logging_config import get_security_logger
+
         logger = get_security_logger()
         assert logger.propagate is False
 
     def test_security_logger_is_singleton(self) -> None:
         from mcp_chassis.logging_config import get_security_logger
+
         assert get_security_logger() is get_security_logger()
 
     def test_security_logger_routes_to_stderr_by_default(
@@ -92,6 +96,7 @@ class TestSecurityLogger:
     ) -> None:
         monkeypatch.delenv("MCP_SECURITY_LOG_PATH", raising=False)
         from mcp_chassis.logging_config import get_security_logger
+
         logger = get_security_logger()
         handler_types = [type(h).__name__ for h in logger.handlers]
         assert "StreamHandler" in handler_types
@@ -100,9 +105,11 @@ class TestSecurityLogger:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: object
     ) -> None:
         import pathlib
+
         log_file = pathlib.Path(str(tmp_path)) / "security.log"
         monkeypatch.setenv("MCP_SECURITY_LOG_PATH", str(log_file))
         from mcp_chassis.logging_config import get_security_logger
+
         logger = get_security_logger()
         handler_types = [type(h).__name__ for h in logger.handlers]
         assert "FileHandler" in handler_types
@@ -177,8 +184,7 @@ class TestSecurityLogger:
         log_security_event("auth_failure")
         record_data = json.loads(emitted[-1])
         ts = record_data.get("timestamp_utc", "")
-        assert ts.endswith("+00:00") or ts.endswith("Z"), \
-            f"Timestamp must be UTC: {ts}"
+        assert ts.endswith("+00:00") or ts.endswith("Z"), f"Timestamp must be UTC: {ts}"
 
     def test_log_security_event_does_not_propagate_to_root(self) -> None:
         """Security events must not appear in the main application log."""
@@ -198,22 +204,22 @@ class TestSecurityLogger:
             logging.getLogger().removeHandler(root_handler)
 
         # The security logger has propagate=False — nothing should reach the root
-        security_records = [
-            r for r in root_records
-            if r.name == "mcp_chassis.security"
-        ]
-        assert not security_records, \
-            "Security events must not propagate to the root logger"
+        security_records = [r for r in root_records if r.name == "mcp_chassis.security"]
+        assert not security_records, "Security events must not propagate to the root logger"
 
-    @pytest.mark.parametrize("event_type", [
-        "auth_failure",
-        "auth_denied",
-        "rate_limit_exceeded",
-        "schema_validation_failure",
-        "replay_rejected",
-        "tls_error",
-    ])
+    @pytest.mark.parametrize(
+        "event_type",
+        [
+            "auth_failure",
+            "auth_denied",
+            "rate_limit_exceeded",
+            "schema_validation_failure",
+            "replay_rejected",
+            "tls_error",
+        ],
+    )
     def test_all_documented_event_types_accepted(self, event_type: str) -> None:
         from mcp_chassis.logging_config import log_security_event
+
         # Must not raise for any documented event type
         log_security_event(event_type, error_detail="test")

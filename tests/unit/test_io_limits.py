@@ -43,7 +43,7 @@ class TestCheckRequestSize:
 
     def test_string_utf8_encoding_counted(self) -> None:
         # Each emoji is 4 bytes in UTF-8
-        emoji = "\U0001F600" * 30  # 30 * 4 = 120 bytes
+        emoji = "\U0001f600" * 30  # 30 * 4 = 120 bytes
         with pytest.raises(IOLimitError):
             check_request_size(emoji, 100)
 

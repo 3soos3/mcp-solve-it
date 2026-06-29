@@ -98,8 +98,10 @@ class MiddlewarePipeline:
         self._config = config
         self._rate_limiter = RateLimiter(config.rate_limits)
         # Resolve effective auth mode: prefer mode (FSS L2-03), fall back to provider
-        auth_mode = config.auth.mode if config.auth.mode != "none" else (
-            config.auth.provider if config.auth.enabled else "none"
+        auth_mode = (
+            config.auth.mode
+            if config.auth.mode != "none"
+            else (config.auth.provider if config.auth.enabled else "none")
         )
         self._auth_provider: AuthProvider = create_auth_provider(
             auth_mode,
@@ -133,13 +135,9 @@ class MiddlewarePipeline:
             result = await self._auth_provider.authenticate(request_context)
             if not result.authenticated or result.identity is None:
                 raise AuthError(f"Authentication failed: {result.reason}")
-            authorized = await self._auth_provider.authorize(
-                result.identity, name, required_scopes
-            )
+            authorized = await self._auth_provider.authorize(result.identity, name, required_scopes)
             if not authorized:
-                raise AuthError(
-                    f"Authorization failed: lacks required scopes for '{name}'"
-                )
+                raise AuthError(f"Authorization failed: lacks required scopes for '{name}'")
         except AuthError as exc:
             logger.warning("Auth check failed for '%s'", name)
             return MiddlewareResult.error(exc)
@@ -195,9 +193,9 @@ class MiddlewarePipeline:
                     f"({delta:.0f}s > {self._config.replay_window_seconds}s)",
                     code="REPLAY_REJECTED",
                 )
-        except (RateLimitError, IOLimitError, AuthError, ValidationError,
-                SanitizationError) as exc:
+        except (RateLimitError, IOLimitError, AuthError, ValidationError, SanitizationError) as exc:
             from mcp_chassis.logging_config import log_security_event
+
             log_security_event(
                 "replay_rejected",
                 error_detail=str(exc.args[0]) if exc.args else str(exc),

@@ -56,9 +56,7 @@ fss_request_timestamp: contextvars.ContextVar[str | None] = contextvars.ContextV
 
 # Bearer token extracted from Authorization header (HTTP transport only)
 # Consumed by the auth middleware via request_context["token"].
-fss_auth_token: contextvars.ContextVar[str] = contextvars.ContextVar(
-    "fss_auth_token", default=""
-)
+fss_auth_token: contextvars.ContextVar[str] = contextvars.ContextVar("fss_auth_token", default="")
 
 # Internal: Token list for resetting all vars after each dispatch
 _ALL_VARS: tuple[contextvars.ContextVar[Any], ...] = (

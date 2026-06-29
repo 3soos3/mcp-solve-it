@@ -185,7 +185,6 @@ class DiagnosticSettings:
     include_config_summary: bool = False
 
 
-
 @dataclass(frozen=True)
 class ServerConfig:
     """Top-level server configuration.
@@ -504,15 +503,11 @@ def _build_security_config(raw: dict[str, Any]) -> SecurityConfig:
 
     auth_provider = auth_raw.get("provider", "none")
     if auth_provider not in _VALID_AUTH_PROVIDERS:
-        raise ValueError(
-            f"Invalid auth provider '{auth_provider}'. Valid: {_VALID_AUTH_PROVIDERS}"
-        )
+        raise ValueError(f"Invalid auth provider '{auth_provider}'. Valid: {_VALID_AUTH_PROVIDERS}")
 
     auth_mode = auth_raw.get("mode", "none")
     if auth_mode not in _VALID_AUTH_MODES:
-        raise ValueError(
-            f"Invalid auth mode '{auth_mode}'. Valid: {_VALID_AUTH_MODES}"
-        )
+        raise ValueError(f"Invalid auth mode '{auth_mode}'. Valid: {_VALID_AUTH_MODES}")
 
     auth = AuthConfig(
         enabled=bool(auth_raw.get("enabled", False)),
@@ -570,5 +565,3 @@ def _build_diagnostic_settings(raw: dict[str, Any]) -> DiagnosticSettings:
         health_check_enabled=bool(raw.get("health_check_enabled", True)),
         include_config_summary=bool(raw.get("include_config_summary", False)),
     )
-
-

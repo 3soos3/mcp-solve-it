@@ -43,9 +43,7 @@ def register_health_check(server: ChassisServer) -> None:
     """
     start_time = time.monotonic()
 
-    async def _handle_health_check(
-        arguments: dict[str, Any], context: HandlerContext
-    ) -> str:
+    async def _handle_health_check(arguments: dict[str, Any], context: HandlerContext) -> str:
         """Handle the health check tool call.
 
         Args:
@@ -66,8 +64,7 @@ def register_health_check(server: ChassisServer) -> None:
             "server_version": config.server.version,
             "chassis_version": mcp_chassis.__version__,
             "python_version": (
-                f"{sys.version_info.major}.{sys.version_info.minor}"
-                f".{sys.version_info.micro}"
+                f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
             ),
             "uptime_seconds": round(uptime, 2),
             "tools_loaded": tool_names,

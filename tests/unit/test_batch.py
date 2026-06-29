@@ -39,16 +39,20 @@ class TestRegisterSimpleTools:
         server = ChassisServer(config)
         source = FakeSource()
 
-        register_simple_tools(server, source, [
-            {
-                "name": "test_get_item",
-                "description": "Get an item by ID.",
-                "method": "get_item",
-                "param": "item_id",
-                "param_description": "The item ID.",
-                "not_found_check": True,
-            },
-        ])
+        register_simple_tools(
+            server,
+            source,
+            [
+                {
+                    "name": "test_get_item",
+                    "description": "Get an item by ID.",
+                    "method": "get_item",
+                    "param": "item_id",
+                    "param_description": "The item ID.",
+                    "not_found_check": True,
+                },
+            ],
+        )
 
         assert "test_get_item" in server.list_tool_names()
 
@@ -60,16 +64,20 @@ class TestRegisterSimpleTools:
         server = ChassisServer(config)
         source = FakeSource()
 
-        register_simple_tools(server, source, [
-            {
-                "name": "test_get_item",
-                "description": "Get an item.",
-                "method": "get_item",
-                "param": "item_id",
-                "param_description": "The item ID.",
-                "not_found_check": True,
-            },
-        ])
+        register_simple_tools(
+            server,
+            source,
+            [
+                {
+                    "name": "test_get_item",
+                    "description": "Get an item.",
+                    "method": "get_item",
+                    "param": "item_id",
+                    "param_description": "The item ID.",
+                    "not_found_check": True,
+                },
+            ],
+        )
 
         result = await server._dispatch_tool("test_get_item", {"item_id": "FOUND-1"})
         assert not result.isError
@@ -84,16 +92,20 @@ class TestRegisterSimpleTools:
         server = ChassisServer(config)
         source = FakeSource()
 
-        register_simple_tools(server, source, [
-            {
-                "name": "test_get_item",
-                "description": "Get an item.",
-                "method": "get_item",
-                "param": "item_id",
-                "param_description": "The item ID.",
-                "not_found_check": True,
-            },
-        ])
+        register_simple_tools(
+            server,
+            source,
+            [
+                {
+                    "name": "test_get_item",
+                    "description": "Get an item.",
+                    "method": "get_item",
+                    "param": "item_id",
+                    "param_description": "The item ID.",
+                    "not_found_check": True,
+                },
+            ],
+        )
 
         result = await server._dispatch_tool("test_get_item", {"item_id": "MISSING"})
         data = json.loads(result.content[0].text)
@@ -107,13 +119,17 @@ class TestRegisterSimpleTools:
         server = ChassisServer(config)
         source = FakeSource()
 
-        register_simple_tools(server, source, [
-            {
-                "name": "test_list_items",
-                "description": "List all items.",
-                "method": "list_items",
-            },
-        ])
+        register_simple_tools(
+            server,
+            source,
+            [
+                {
+                    "name": "test_list_items",
+                    "description": "List all items.",
+                    "method": "list_items",
+                },
+            ],
+        )
 
         result = await server._dispatch_tool("test_list_items", {})
         raw = json.loads(result.content[0].text)
@@ -130,15 +146,19 @@ class TestRegisterSimpleTools:
         server = ChassisServer(config)
         source = FakeSource()
 
-        register_simple_tools(server, source, [
-            {
-                "name": "test_get_related",
-                "description": "Get related items.",
-                "method": "get_related",
-                "param": "item_id",
-                "param_description": "The item ID.",
-            },
-        ])
+        register_simple_tools(
+            server,
+            source,
+            [
+                {
+                    "name": "test_get_related",
+                    "description": "Get related items.",
+                    "method": "get_related",
+                    "param": "item_id",
+                    "param_description": "The item ID.",
+                },
+            ],
+        )
 
         result = await server._dispatch_tool("test_get_related", {"item_id": "FOUND-1"})
         raw = json.loads(result.content[0].text)
@@ -153,12 +173,22 @@ class TestRegisterSimpleTools:
         server = ChassisServer(config)
         source = FakeSource()
 
-        register_simple_tools(server, source, [
-            {"name": "tool_a", "description": "A.", "method": "list_items"},
-            {"name": "tool_b", "description": "B.", "method": "list_items"},
-            {"name": "tool_c", "description": "C.", "method": "get_item",
-             "param": "item_id", "param_description": "ID.", "not_found_check": True},
-        ])
+        register_simple_tools(
+            server,
+            source,
+            [
+                {"name": "tool_a", "description": "A.", "method": "list_items"},
+                {"name": "tool_b", "description": "B.", "method": "list_items"},
+                {
+                    "name": "tool_c",
+                    "description": "C.",
+                    "method": "get_item",
+                    "param": "item_id",
+                    "param_description": "ID.",
+                    "not_found_check": True,
+                },
+            ],
+        )
 
         names = server.list_tool_names()
         assert "tool_a" in names

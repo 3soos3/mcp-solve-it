@@ -280,9 +280,7 @@ class TestConfigFileSearchOrder:
         config = ServerConfig.load(None)
         assert config.server.name == "env-server"
 
-    def test_explicit_path_takes_priority_over_all(
-        self, tmp_path: Path, monkeypatch: Any
-    ) -> None:
+    def test_explicit_path_takes_priority_over_all(self, tmp_path: Path, monkeypatch: Any) -> None:
         """--config argument takes priority over env var and CWD."""
         # Set up env var
         env_config = tmp_path / "env-config.toml"

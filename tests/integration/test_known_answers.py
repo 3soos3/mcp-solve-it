@@ -59,6 +59,7 @@ def kb() -> Any:
 
 # ── Technique KATs ────────────────────────────────────────────────────────────
 
+
 class TestTechniqueKATs:
     """Known-answer tests for solveit_get_technique equivalent."""
 
@@ -91,6 +92,7 @@ class TestTechniqueKATs:
 
 # ── Weakness KATs ─────────────────────────────────────────────────────────────
 
+
 class TestWeaknessKATs:
     """Known-answer tests for solveit_get_weakness equivalent."""
 
@@ -116,6 +118,7 @@ class TestWeaknessKATs:
 
 # ── Mitigation KATs ───────────────────────────────────────────────────────────
 
+
 class TestMitigationKATs:
     """Known-answer tests for solveit_get_mitigation equivalent."""
 
@@ -139,6 +142,7 @@ class TestMitigationKATs:
 
 
 # ── Relationship KATs ─────────────────────────────────────────────────────────
+
 
 class TestRelationshipKATs:
     """Known-answer tests for relationship traversal tools."""
@@ -174,6 +178,7 @@ class TestRelationshipKATs:
 
 # ── Search KATs ───────────────────────────────────────────────────────────────
 
+
 class TestSearchKATs:
     """Known-answer tests for solveit_search equivalent."""
 
@@ -181,7 +186,7 @@ class TestSearchKATs:
         results = kb.search(keywords="triage")
         ids: list[str] = []
         for category in results.values() if isinstance(results, dict) else [results]:
-            for item in (category if isinstance(category, list) else []):
+            for item in category if isinstance(category, list) else []:
                 item_id = item.get("id") if isinstance(item, dict) else getattr(item, "id", None)
                 if item_id:
                     ids.append(item_id)
@@ -189,10 +194,15 @@ class TestSearchKATs:
 
     def test_search_nonexistent_returns_empty(self, kb: Any) -> None:
         results = kb.search(keywords="xyzzy_no_match_9a8b7c")
-        total = sum(
-            len(v) for v in results.values()
-            if isinstance(results, dict) and isinstance(v, list)
-        ) if isinstance(results, dict) else 0
+        total = (
+            sum(
+                len(v)
+                for v in results.values()
+                if isinstance(results, dict) and isinstance(v, list)
+            )
+            if isinstance(results, dict)
+            else 0
+        )
         assert total == 0, f"Expected no results for nonsense query, got: {results}"
 
     def test_search_and_logic_more_restrictive(self, kb: Any) -> None:
@@ -204,11 +214,13 @@ class TestSearchKATs:
                 return sum(len(v) for v in r.values() if isinstance(v, list))
             return len(r) if isinstance(r, list) else 0
 
-        assert count(and_results) <= count(or_results), \
+        assert count(and_results) <= count(or_results), (
             "AND search should return ≤ results than OR search"
+        )
 
 
 # ── Citation KATs ─────────────────────────────────────────────────────────────
+
 
 class TestCitationKATs:
     """Known-answer tests for citation resolution."""
@@ -229,6 +241,5 @@ class TestCitationKATs:
     def test_resolve_inline_citation(self, kb: Any) -> None:
         text = "See [DFCite-1001] for details."
         resolved = kb.resolve_inline_citations(text)
-        assert "[DFCite-1001]" not in resolved, \
-            f"Citation marker should be resolved: {resolved!r}"
+        assert "[DFCite-1001]" not in resolved, f"Citation marker should be resolved: {resolved!r}"
         assert len(resolved) > 0
