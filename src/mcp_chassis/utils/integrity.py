@@ -26,6 +26,7 @@ _ALGO_MAP: dict[str, str] = {
 # Optional: jcs for RFC 8785 canonical JSON (FSS-0005 §4.3 RECOMMENDED)
 try:
     import jcs as _jcs
+
     _JCS_AVAILABLE = True
 except ImportError:
     _jcs = None  # type: ignore[assignment]
@@ -37,6 +38,7 @@ try:
 
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
     _CRYPTO_AVAILABLE = True
 except ImportError:
     Ed25519PrivateKey = None  # type: ignore[assignment, misc]
@@ -54,10 +56,7 @@ def compute_cai(data: bytes, algorithm: str = "sha2-256") -> str:
         CAI string in the form 'algorithm:lowercase-hex'.
     """
     if algorithm not in _ALGO_MAP:
-        raise ValueError(
-            f"Unsupported algorithm '{algorithm}'. "
-            f"Approved: {list(_ALGO_MAP)}"
-        )
+        raise ValueError(f"Unsupported algorithm '{algorithm}'. Approved: {list(_ALGO_MAP)}")
     digest = hashlib.new(_ALGO_MAP[algorithm], data).hexdigest()
     return f"{algorithm}:{digest}"
 
@@ -121,6 +120,7 @@ def compute_kb_version_id(data_path: str, algorithm: str = "sha2-256") -> str:
 
 # ── Ed25519 signing (FSS-0005 §6, required for Level 3) ───────────────
 
+
 def load_signing_key() -> Any | None:
     """Load the Ed25519 signing key from environment.
 
@@ -176,16 +176,13 @@ def sign_provenance(payload: dict[str, Any], key: Any) -> str:
 
     signed_fields = {
         k: payload[k]
-        for k in ("transaction_id", "tool_name", "tool_version",
-                  "result_cai", "timestamp_utc")
+        for k in ("transaction_id", "tool_name", "tool_version", "result_cai", "timestamp_utc")
         if k in payload
     }
     if _JCS_AVAILABLE:
         message = _jcs.canonicalize(signed_fields)
     else:
-        message = json.dumps(
-            signed_fields, sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
+        message = json.dumps(signed_fields, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
     signature_bytes = key.sign(message)
     return base64.urlsafe_b64encode(signature_bytes).rstrip(b"=").decode("ascii")

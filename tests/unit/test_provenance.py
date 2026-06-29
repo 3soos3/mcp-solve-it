@@ -59,9 +59,14 @@ def _set_context(
 
 def _clear_context() -> None:
     for var in (
-        fss_transaction_id, fss_parameters_cai, fss_result_cai,
-        fss_result_status, fss_investigation_id, fss_analyst_identity,
-        fss_agent_identity, fss_client_identity,
+        fss_transaction_id,
+        fss_parameters_cai,
+        fss_result_cai,
+        fss_result_status,
+        fss_investigation_id,
+        fss_analyst_identity,
+        fss_agent_identity,
+        fss_client_identity,
     ):
         var.set(None)
 
@@ -114,7 +119,8 @@ class TestBuildProvenanceRecord:
 
     def test_kb_version_id_passed_through(self) -> None:
         record = build_provenance_record(
-            "tool", "1.0.0",
+            "tool",
+            "1.0.0",
             kb_version_id="sha2-256:kb-hash",
             kb_version="solve-it-v2025.10",
         )
@@ -140,8 +146,9 @@ class TestEvidentiaryStatus:
         assert record["evidentiary_status"] == "evidentiary"
         assert record["result_status"] == "success"
 
-    def test_success_without_forensic_metadata_is_non_evidentiary(self,
-            monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_success_without_forensic_metadata_is_non_evidentiary(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("FORENSIC_METADATA", "false")
         _set_context(result_status="success")
         record = build_provenance_record("tool", "1.0.0")
@@ -205,9 +212,7 @@ class TestSignatureField:
     def teardown_method(self) -> None:
         _clear_context()
 
-    def test_signature_absent_when_no_key_configured(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_signature_absent_when_no_key_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("FSS_SIGNING_KEY_PATH", raising=False)
         monkeypatch.delenv("FSS_SIGNING_KEY_B64", raising=False)
         _set_context(result_status="success")

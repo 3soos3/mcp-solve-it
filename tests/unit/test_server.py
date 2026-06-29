@@ -76,9 +76,7 @@ class TestServerRegistration:
             return "v2"
 
         server.register_tool("my_tool", "first", {"type": "object"}, h1)
-        server.register_tool(
-            "my_tool", "second", {"type": "object"}, h2, allow_overwrite=True
-        )
+        server.register_tool("my_tool", "second", {"type": "object"}, h2, allow_overwrite=True)
         assert server._tools["my_tool"]["description"] == "second"
 
     def test_duplicate_resource_raises(self, server: ChassisServer) -> None:
@@ -100,9 +98,7 @@ class TestServerRegistration:
             return "v2"
 
         server.register_resource("template://test", h1, name="First")
-        server.register_resource(
-            "template://test", h2, name="Second", allow_overwrite=True
-        )
+        server.register_resource("template://test", h2, name="Second", allow_overwrite=True)
         assert server._resources["template://test"]["name"] == "Second"
 
     def test_duplicate_prompt_raises(self, server: ChassisServer) -> None:
@@ -124,9 +120,7 @@ class TestServerRegistration:
             return []
 
         server.register_prompt("my_prompt", h1, description="First")
-        server.register_prompt(
-            "my_prompt", h2, description="Second", allow_overwrite=True
-        )
+        server.register_prompt("my_prompt", h2, description="Second", allow_overwrite=True)
         assert server._prompts["my_prompt"]["description"] == "Second"
 
     def test_register_tool_with_auth_scopes(self, server: ChassisServer) -> None:
@@ -353,6 +347,7 @@ class TestServerResourceDispatch:
     @pytest.mark.asyncio
     async def test_unknown_resource_raises(self, server: ChassisServer) -> None:
         from mcp.shared.exceptions import McpError
+
         with pytest.raises(McpError):
             await server._dispatch_resource("template://unknown")
 
@@ -363,6 +358,7 @@ class TestServerResourceDispatch:
 
         server.register_resource("template://fail", failing_handler)
         from mcp.shared.exceptions import McpError
+
         with pytest.raises(McpError):
             await server._dispatch_resource("template://fail")
 
@@ -388,6 +384,7 @@ class TestServerPromptDispatch:
     @pytest.mark.asyncio
     async def test_unknown_prompt_raises(self, server: ChassisServer) -> None:
         from mcp.shared.exceptions import McpError
+
         with pytest.raises(McpError):
             await server._dispatch_prompt("nonexistent", {})
 
@@ -398,6 +395,7 @@ class TestServerPromptDispatch:
 
         server.register_prompt("broken", failing_handler)
         from mcp.shared.exceptions import McpError
+
         with pytest.raises(McpError):
             await server._dispatch_prompt("broken", {})
 
@@ -549,7 +547,10 @@ class TestResourceDispatchMiddleware:
             server=ServerSettings(),
             security=SecurityConfig(
                 rate_limits=RateLimitConfig(
-                    enabled=True, global_rpm=60, per_tool_rpm=30, burst_size=1,
+                    enabled=True,
+                    global_rpm=60,
+                    per_tool_rpm=30,
+                    burst_size=1,
                 ),
                 io_limits=IOLimitConfig(),
                 input_validation=ValidationConfig(enabled=False),
@@ -572,6 +573,7 @@ class TestResourceDispatchMiddleware:
 
         # Second should be rate limited
         from mcp.shared.exceptions import McpError
+
         with pytest.raises(McpError) as exc_info:
             await s._dispatch_resource("template://test")
         assert "RATE_LIMIT_EXCEEDED" in str(exc_info.value)
@@ -583,7 +585,8 @@ class TestResourceDispatchMiddleware:
             security=SecurityConfig(
                 rate_limits=RateLimitConfig(enabled=False),
                 io_limits=IOLimitConfig(
-                    max_request_size=1_048_576, max_response_size=10,
+                    max_request_size=1_048_576,
+                    max_response_size=10,
                 ),
                 input_validation=ValidationConfig(enabled=False),
                 input_sanitization=SanitizationConfig(enabled=False, level="permissive"),
@@ -599,6 +602,7 @@ class TestResourceDispatchMiddleware:
 
         s.register_resource("template://big", big_handler)
         from mcp.shared.exceptions import McpError
+
         with pytest.raises(McpError) as exc_info:
             await s._dispatch_resource("template://big")
         assert "RESPONSE_TOO_LARGE" in str(exc_info.value)
@@ -629,7 +633,10 @@ class TestPromptDispatchMiddleware:
             server=ServerSettings(),
             security=SecurityConfig(
                 rate_limits=RateLimitConfig(
-                    enabled=True, global_rpm=60, per_tool_rpm=30, burst_size=1,
+                    enabled=True,
+                    global_rpm=60,
+                    per_tool_rpm=30,
+                    burst_size=1,
                 ),
                 io_limits=IOLimitConfig(),
                 input_validation=ValidationConfig(enabled=False),
@@ -652,6 +659,7 @@ class TestPromptDispatchMiddleware:
 
         # Second rate limited
         from mcp.shared.exceptions import McpError
+
         with pytest.raises(McpError) as exc_info:
             await s._dispatch_prompt("greet", {})
         assert "RATE_LIMIT_EXCEEDED" in str(exc_info.value)
@@ -704,6 +712,7 @@ class TestPromptDispatchMiddleware:
 
         s.register_prompt("greet", handler)
         from mcp.shared.exceptions import McpError
+
         with pytest.raises(McpError) as exc_info:
             await s._dispatch_prompt("greet", {"data": "x" * 100})
         assert "REQUEST_TOO_LARGE" in str(exc_info.value) or "IO_LIMIT" in str(exc_info.value)
@@ -778,11 +787,9 @@ class TestInitHook:
         """on_init(server) is called when init_module is set."""
         # Create a temp module that sets an attribute on the server
         init_file = tmp_path / "test_init_hook.py"
-        init_file.write_text(
-            "def on_init(server):\n"
-            "    server._test_init_called = True\n"
-        )
+        init_file.write_text("def on_init(server):\n    server._test_init_called = True\n")
         import sys
+
         sys.path.insert(0, str(tmp_path))
         try:
             config = make_test_config(init_module="test_init_hook")
@@ -801,6 +808,7 @@ class TestInitHook:
     def test_init_hook_bad_module_logs_error(self, caplog: Any) -> None:
         """A nonexistent init_module logs an error but doesn't crash the server."""
         import logging
+
         config = make_test_config(init_module="nonexistent_module_xyz")
         with caplog.at_level(logging.ERROR, logger="mcp_chassis.server"):
             ChassisServer(config)
@@ -809,11 +817,9 @@ class TestInitHook:
     def test_init_hook_runs_before_extension_discovery(self, tmp_path: Any) -> None:
         """The init hook runs before extensions are discovered."""
         init_file = tmp_path / "test_init_order.py"
-        init_file.write_text(
-            "def on_init(server):\n"
-            "    server._init_hook_ran = True\n"
-        )
+        init_file.write_text("def on_init(server):\n    server._init_hook_ran = True\n")
         import sys
+
         sys.path.insert(0, str(tmp_path))
         try:
             config = make_test_config(

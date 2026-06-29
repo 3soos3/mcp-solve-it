@@ -36,15 +36,17 @@ class TestDegradedMode:
 
     def test_error_message_present(self, degraded: PodmanMCPClient) -> None:
         status = degraded.call_tool("solveit_status")
-        assert status.get("error") or status.get("message"), \
+        assert status.get("error") or status.get("message"), (
             "Expected an error explanation in degraded solveit_status"
+        )
 
     def test_only_baseline_tools_exposed(self, degraded: PodmanMCPClient) -> None:
         names = degraded.tool_names()
         assert "__health_check" in names
         assert "solveit_status" in names
-        assert "solveit_get_technique" not in names, \
+        assert "solveit_get_technique" not in names, (
             "KB tools must be absent when KB failed to load"
+        )
 
     def test_tool_count_is_exactly_two(self, degraded: PodmanMCPClient) -> None:
         names = degraded.tool_names()
@@ -90,5 +92,6 @@ class TestBundledImages:
     ) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         status = client.call_tool("solveit_status")
-        assert status.get("status") == "ok", \
+        assert status.get("status") == "ok", (
             f"{fixture_name} should start ok without volume: {status}"
+        )

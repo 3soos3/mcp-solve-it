@@ -41,8 +41,7 @@ class TestTokenEnvVarAlone:
             extra_env=base.extra_env + ("MCP_AUTH_TOKEN=test-token-xyz",),
         )
         data = client.call_tool("solveit_status")
-        assert "_error" not in data, \
-            f"Server failed to start with MCP_AUTH_TOKEN set: {data}"
+        assert "_error" not in data, f"Server failed to start with MCP_AUTH_TOKEN set: {data}"
 
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
     def test_results_identical_with_and_without_token(
@@ -59,8 +58,9 @@ class TestTokenEnvVarAlone:
 
         name_without = base.unwrap(without).get("name")
         name_with = base.unwrap(with_token).get("name")
-        assert name_without == name_with and isinstance(name_without, str) and name_without, \
+        assert name_without == name_with and isinstance(name_without, str) and name_without, (
             f"Token env changed result: without={name_without!r}, with={name_with!r}"
+        )
 
 
 class TestTokenAuthOnStdioFails:
@@ -82,10 +82,7 @@ class TestTokenAuthOnStdioFails:
         # call_tool wraps transport errors: {"_error": "empty content", "_raw": {inner}}
         # so we must check both the top-level error and the inner _raw error.
         raw_inner = result.get("_raw", {})
-        transport_error = (
-            result.get("_error", "") +
-            " " + raw_inner.get("_error", "")
-        )
+        transport_error = result.get("_error", "") + " " + raw_inner.get("_error", "")
         if "_error" not in result and "_is_tool_error" not in result:
             pytest.skip(
                 f"{label}: server started fine with MCP_AUTH_ENABLED=true — "
@@ -93,14 +90,13 @@ class TestTokenAuthOnStdioFails:
                 "was added to the chassis. Rebuild the image to activate this test."
             )
         startup_failed = (
-            "no initialize response" in transport_error or
-            "no id=2 response" in transport_error
+            "no initialize response" in transport_error or "no id=2 response" in transport_error
         )
-        assert startup_failed, \
-            f"{label}: expected MCP startup failure, got: {result}"
+        assert startup_failed, f"{label}: expected MCP startup failure, got: {result}"
         stderr = raw_inner.get("_stderr", result.get("_stderr", "")).lower()
-        assert "stdio" in stderr or "token" in stderr or "auth" in stderr or stderr == "", \
+        assert "stdio" in stderr or "token" in stderr or "auth" in stderr or stderr == "", (
             f"{label}: unexpected stderr: {stderr[:200]}"
+        )
 
     @pytest.mark.parametrize("fixture_name", ["monthly", "version"])
     def test_token_auth_enabled_on_stdio_fails(
@@ -154,8 +150,9 @@ class TestAuthExplicitlyDisabled:
             ),
         )
         data = client.call_tool("solveit_status")
-        assert data.get("status") == "ok", \
+        assert data.get("status") == "ok", (
             f"Server with MCP_AUTH_ENABLED=false should work fine: {data}"
+        )
 
 
 class TestDataURLCredentials:
@@ -166,9 +163,7 @@ class TestDataURLCredentials:
     the URL is unreachable or returns auth errors.
     """
 
-    def test_bad_data_url_degrades_gracefully(
-        self, live_image: str
-    ) -> None:
+    def test_bad_data_url_degrades_gracefully(self, live_image: str) -> None:
         """A completely unreachable URL should produce status=error, not a crash."""
         client = PodmanMCPClient(
             image=live_image,
@@ -179,8 +174,9 @@ class TestDataURLCredentials:
         )
         data = client.call_tool("solveit_status")
         assert "_error" not in data, f"Container crashed on bad data URL: {data}"
-        assert data.get("status") == "error", \
+        assert data.get("status") == "error", (
             f"Expected status=error on bad data URL, got: {data.get('status')}"
+        )
 
     def test_api_token_env_var_accepted(self, live_image: str) -> None:
         """SOLVE_IT_API_TOKEN env var (if the app uses one) should not break startup."""
@@ -193,8 +189,7 @@ class TestDataURLCredentials:
             ),
         )
         data = client.call_tool("solveit_status")
-        assert "_error" not in data, \
-            f"Setting SOLVE_IT_API_TOKEN broke startup: {data}"
+        assert "_error" not in data, f"Setting SOLVE_IT_API_TOKEN broke startup: {data}"
 
     def test_mounted_kb_bypasses_url_auth(self, live_image: str) -> None:
         """With a mounted KB the data URL (and its credentials) are irrelevant."""
@@ -207,8 +202,9 @@ class TestDataURLCredentials:
             ),
         )
         status = client.call_tool("solveit_status")
-        assert status.get("status") == "ok", \
+        assert status.get("status") == "ok", (
             f"Mounted KB should work regardless of API token: {status}"
+        )
 
 
 class TestDetailedErrors:
@@ -247,13 +243,10 @@ class TestDetailedErrors:
         base: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = base.call_tool("solveit_search", {"keywords": 12345})
         # Error response must exist in some form
-        has_error = (
-            data.get("_is_tool_error")
-            or "error_code" in data
-            or "_raw_text" in data
-        )
+        has_error = data.get("_is_tool_error") or "error_code" in data or "_raw_text" in data
         assert has_error, f"Expected a validation error for int keywords, got: {data}"
         # The error should not leak a stack trace
         raw = data.get("_raw_text", "") or data.get("error_message", "")
-        assert "stack" not in raw.lower() and "traceback" not in raw.lower(), \
+        assert "stack" not in raw.lower() and "traceback" not in raw.lower(), (
             "Default error should not include a Python traceback"
+        )

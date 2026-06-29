@@ -36,6 +36,7 @@ _kb = KnowledgeBase(base_path=_SOLVEIT_PATH)
 
 # ── Helpers ─────────────────────────────────────────────────────────────
 
+
 async def _call_tool(mcp_client: Any, tool_name: str, arguments: dict[str, Any]) -> Any:
     """Call an MCP tool and return the parsed JSON result."""
     response = await mcp_client.send_request(
@@ -47,6 +48,7 @@ async def _call_tool(mcp_client: Any, tool_name: str, arguments: dict[str, Any])
 
 
 # ── Differential: Technique Lookup ──────────────────────────────────────
+
 
 @pytest.mark.asyncio
 class TestDifferentialTechniqueLookup:
@@ -72,15 +74,14 @@ class TestDifferentialTechniqueLookup:
             kb_val = _kb.get_technique(t_id)
             if kb_val is None:
                 continue  # ID doesn't exist, skip
-            mcp_val = await _call_tool(
-                mcp_client, "solveit_get_technique", {"technique_id": t_id}
-            )
+            mcp_val = await _call_tool(mcp_client, "solveit_get_technique", {"technique_id": t_id})
             assert mcp_val["id"] == kb_val["id"]
             assert mcp_val["name"] == kb_val["name"]
             assert mcp_val["description"] == kb_val["description"]
 
 
 # ── Differential: Weakness Lookup ───────────────────────────────────────
+
 
 @pytest.mark.asyncio
 class TestDifferentialWeaknessLookup:
@@ -102,6 +103,7 @@ class TestDifferentialWeaknessLookup:
 
 # ── Differential: Mitigation Lookup ─────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestDifferentialMitigationLookup:
     """Verify MCP mitigation lookups match the KB library."""
@@ -121,6 +123,7 @@ class TestDifferentialMitigationLookup:
 
 
 # ── Differential: Summary Listings ──────────────────────────────────────
+
 
 @pytest.mark.asyncio
 class TestDifferentialListings:
@@ -183,6 +186,7 @@ class TestDifferentialListings:
 
 
 # ── Differential: Relationships ─────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 class TestDifferentialRelationships:
@@ -261,6 +265,7 @@ class TestDifferentialRelationships:
 
 # ── Differential: Search ────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestDifferentialSearch:
     """Verify MCP search returns the same results as the KB library."""
@@ -268,9 +273,7 @@ class TestDifferentialSearch:
     async def test_search_result_counts_match(self, mcp_client: Any) -> None:
         """Search for 'disk image' should return same counts via MCP and KB."""
         kb_result = _kb.search("disk image")
-        mcp_result = await _call_tool(
-            mcp_client, "solveit_search", {"keywords": "disk image"}
-        )
+        mcp_result = await _call_tool(mcp_client, "solveit_search", {"keywords": "disk image"})
         assert len(mcp_result["techniques"]) == len(kb_result["techniques"]), (
             f"Technique count: KB={len(kb_result['techniques'])}, "
             f"MCP={len(mcp_result['techniques'])}"
@@ -281,15 +284,12 @@ class TestDifferentialSearch:
     async def test_search_result_ids_match(self, mcp_client: Any) -> None:
         """Search results should contain the same IDs via MCP and KB."""
         kb_result = _kb.search("disk image")
-        mcp_result = await _call_tool(
-            mcp_client, "solveit_search", {"keywords": "disk image"}
-        )
+        mcp_result = await _call_tool(mcp_client, "solveit_search", {"keywords": "disk image"})
         for item_type in ("techniques", "weaknesses", "mitigations"):
             kb_ids = {item["id"] for item in kb_result[item_type]}
             mcp_ids = {item["id"] for item in mcp_result[item_type]}
             assert mcp_ids == kb_ids, (
-                f"{item_type} ID mismatch: "
-                f"KB-only={kb_ids - mcp_ids}, MCP-only={mcp_ids - kb_ids}"
+                f"{item_type} ID mismatch: KB-only={kb_ids - mcp_ids}, MCP-only={mcp_ids - kb_ids}"
             )
 
     async def test_search_with_item_type_filter(self, mcp_client: Any) -> None:
@@ -323,6 +323,7 @@ class TestDifferentialSearch:
 
 # ── Differential: Objectives ────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestDifferentialObjectives:
     """Verify MCP objective tools return the same data as the KB."""
@@ -330,17 +331,13 @@ class TestDifferentialObjectives:
     async def test_objective_count_matches(self, mcp_client: Any) -> None:
         """MCP should list the same number of objectives as the KB."""
         kb_objectives = _kb.list_objectives()
-        mcp_objectives = await _call_tool(
-            mcp_client, "solveit_list_objectives", {}
-        )
+        mcp_objectives = await _call_tool(mcp_client, "solveit_list_objectives", {})
         assert len(mcp_objectives) == len(kb_objectives)
 
     async def test_objective_names_match(self, mcp_client: Any) -> None:
         """Every objective name from the KB should appear in the MCP list."""
         kb_objectives = _kb.list_objectives()
-        mcp_objectives = await _call_tool(
-            mcp_client, "solveit_list_objectives", {}
-        )
+        mcp_objectives = await _call_tool(mcp_client, "solveit_list_objectives", {})
         kb_names = {o["name"] for o in kb_objectives}
         mcp_names = {o["name"] for o in mcp_objectives}
         assert mcp_names == kb_names
@@ -362,6 +359,7 @@ class TestDifferentialObjectives:
 
 
 # ── Differential: Status Counts ─────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 class TestDifferentialStatus:

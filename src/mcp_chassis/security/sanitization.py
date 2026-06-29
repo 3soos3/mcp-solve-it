@@ -131,11 +131,11 @@ def _decode_traversal_percent_encoding(value: str) -> str:
         String with traversal-relevant percent encodings decoded.
     """
     _decode_map = {
-        "%2e": ".", "%2f": "/", "%5c": "\\",
+        "%2e": ".",
+        "%2f": "/",
+        "%5c": "\\",
     }
-    return _TRAVERSAL_ENCODED_RE.sub(
-        lambda m: _decode_map[m.group(0).lower()], value
-    )
+    return _TRAVERSAL_ENCODED_RE.sub(lambda m: _decode_map[m.group(0).lower()], value)
 
 
 def _strip_path_traversal(value: str) -> str:

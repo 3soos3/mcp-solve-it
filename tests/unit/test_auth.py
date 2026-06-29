@@ -155,11 +155,13 @@ class TestCreateAuthProvider:
 
     def test_creates_apikey_provider(self) -> None:
         from mcp_chassis.security.auth import ApiKeyProvider
+
         provider = create_auth_provider("apikey")
         assert isinstance(provider, ApiKeyProvider)
 
     def test_creates_oauth_provider(self) -> None:
         from mcp_chassis.security.auth import OAuthJWTProvider
+
         provider = create_auth_provider("oauth")
         assert isinstance(provider, OAuthJWTProvider)
 
@@ -189,9 +191,7 @@ class TestCheckAuth:
         # (token provider grants * scope on success, so we test with a custom provider)
         class RestrictedProvider(AuthProvider):
             async def authenticate(self, request_context: dict) -> AuthResult:
-                return AuthResult.success(
-                    AuthIdentity(id="limited", scopes=frozenset(["read"]))
-                )
+                return AuthResult.success(AuthIdentity(id="limited", scopes=frozenset(["read"])))
 
             async def authorize(
                 self, identity: AuthIdentity, tool_name: str, scopes: list[str]
@@ -209,10 +209,8 @@ class TestApiKeyProvider:
     def _make_key_store(self, tmp_path: object, keys: dict[str, str]) -> str:
         """Write a hashed key store JSON file and return its path."""
         import pathlib
-        store = {
-            hashlib.sha256(k.encode()).hexdigest(): label
-            for k, label in keys.items()
-        }
+
+        store = {hashlib.sha256(k.encode()).hexdigest(): label for k, label in keys.items()}
         p = pathlib.Path(str(tmp_path)) / "keys.json"
         p.write_text(json.dumps(store))
         return str(p)
@@ -220,12 +218,11 @@ class TestApiKeyProvider:
     @pytest.mark.asyncio
     async def test_valid_key_authenticates(self, tmp_path: object) -> None:
         from mcp_chassis.security.auth import ApiKeyProvider
+
         raw_key = "a" * 32  # 32 bytes entropy minimum
         path = self._make_key_store(tmp_path, {raw_key: "analyst-1"})
         provider = ApiKeyProvider(keys_path=path)
-        result = await provider.authenticate(
-            {"authorization_header": f"Bearer {raw_key}"}
-        )
+        result = await provider.authenticate({"authorization_header": f"Bearer {raw_key}"})
         assert result.authenticated
         assert result.identity is not None
         assert result.identity.id == "analyst-1"
@@ -233,17 +230,17 @@ class TestApiKeyProvider:
     @pytest.mark.asyncio
     async def test_wrong_key_fails(self, tmp_path: object) -> None:
         from mcp_chassis.security.auth import ApiKeyProvider
+
         raw_key = "a" * 32
         path = self._make_key_store(tmp_path, {raw_key: "analyst-1"})
         provider = ApiKeyProvider(keys_path=path)
-        result = await provider.authenticate(
-            {"authorization_header": "Bearer " + "b" * 32}
-        )
+        result = await provider.authenticate({"authorization_header": "Bearer " + "b" * 32})
         assert not result.authenticated
 
     @pytest.mark.asyncio
     async def test_missing_authorization_header_fails(self, tmp_path: object) -> None:
         from mcp_chassis.security.auth import ApiKeyProvider
+
         path = self._make_key_store(tmp_path, {"a" * 32: "analyst-1"})
         provider = ApiKeyProvider(keys_path=path)
         result = await provider.authenticate({})
@@ -253,27 +250,26 @@ class TestApiKeyProvider:
     @pytest.mark.asyncio
     async def test_key_too_short_fails(self, tmp_path: object) -> None:
         from mcp_chassis.security.auth import ApiKeyProvider
+
         path = self._make_key_store(tmp_path, {"short": "analyst-1"})
         provider = ApiKeyProvider(keys_path=path)
-        result = await provider.authenticate(
-            {"authorization_header": "Bearer short"}
-        )
+        result = await provider.authenticate({"authorization_header": "Bearer short"})
         assert not result.authenticated
         assert "too short" in result.reason
 
     @pytest.mark.asyncio
     async def test_empty_key_store_fails(self, tmp_path: object) -> None:
         from mcp_chassis.security.auth import ApiKeyProvider
+
         path = self._make_key_store(tmp_path, {})
         provider = ApiKeyProvider(keys_path=path)
-        result = await provider.authenticate(
-            {"authorization_header": "Bearer " + "a" * 32}
-        )
+        result = await provider.authenticate({"authorization_header": "Bearer " + "a" * 32})
         assert not result.authenticated
 
     @pytest.mark.asyncio
     async def test_authorize_grants_wildcard(self, tmp_path: object) -> None:
         from mcp_chassis.security.auth import ApiKeyProvider
+
         path = self._make_key_store(tmp_path, {"a" * 32: "analyst-1"})
         provider = ApiKeyProvider(keys_path=path)
         identity = AuthIdentity(id="analyst-1", scopes=frozenset(["*"]))
@@ -281,6 +277,7 @@ class TestApiKeyProvider:
 
     def test_missing_keys_path_logs_warning(self) -> None:
         from mcp_chassis.security.auth import ApiKeyProvider
+
         # Should not raise — just logs a warning
         provider = ApiKeyProvider(keys_path="")
         assert provider is not None
@@ -291,6 +288,7 @@ class TestOAuthJWTProvider:
 
     def test_creates_with_config(self) -> None:
         from mcp_chassis.security.auth import OAuthJWTProvider
+
         provider = OAuthJWTProvider(
             jwks_url="https://example.com/.well-known/jwks.json",
             audience="my-api",
@@ -301,8 +299,8 @@ class TestOAuthJWTProvider:
     @pytest.mark.asyncio
     async def test_missing_bearer_token_fails(self) -> None:
         from mcp_chassis.security.auth import OAuthJWTProvider
-        provider = OAuthJWTProvider(jwks_url="https://example.com/jwks",
-                                    audience="", issuer="")
+
+        provider = OAuthJWTProvider(jwks_url="https://example.com/jwks", audience="", issuer="")
         result = await provider.authenticate({})
         assert not result.authenticated
         assert "no Bearer token" in result.reason
@@ -310,14 +308,15 @@ class TestOAuthJWTProvider:
     @pytest.mark.asyncio
     async def test_missing_authorization_header_fails(self) -> None:
         from mcp_chassis.security.auth import OAuthJWTProvider
-        provider = OAuthJWTProvider(jwks_url="https://example.com/jwks",
-                                    audience="", issuer="")
+
+        provider = OAuthJWTProvider(jwks_url="https://example.com/jwks", audience="", issuer="")
         result = await provider.authenticate({"authorization_header": "Basic abc"})
         assert not result.authenticated
 
     @pytest.mark.asyncio
     async def test_authorize_grants_wildcard(self) -> None:
         from mcp_chassis.security.auth import OAuthJWTProvider
+
         provider = OAuthJWTProvider(jwks_url="", audience="", issuer="")
         identity = AuthIdentity(id="sub-123", scopes=frozenset(["*"]))
         assert await provider.authorize(identity, "tool", ["scope"])

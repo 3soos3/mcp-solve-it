@@ -91,7 +91,7 @@ def _load_env_file(env_path: Path) -> None:
                 continue
             # Strip optional 'export ' prefix
             if line.startswith("export "):
-                line = line[len("export "):]
+                line = line[len("export ") :]
             if "=" not in line:
                 continue
             key, _, value = line.partition("=")

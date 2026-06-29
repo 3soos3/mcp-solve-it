@@ -21,7 +21,7 @@ class TestComputeCai:
     def test_returns_sha2_256_format(self) -> None:
         cai = compute_cai(b"hello")
         assert cai.startswith("sha2-256:")
-        hex_part = cai[len("sha2-256:"):]
+        hex_part = cai[len("sha2-256:") :]
         assert len(hex_part) == 64  # SHA-256 = 32 bytes = 64 hex chars
         assert all(c in "0123456789abcdef" for c in hex_part)
 
@@ -33,13 +33,13 @@ class TestComputeCai:
     def test_sha2_384_algorithm(self) -> None:
         cai = compute_cai(b"hello", algorithm="sha2-384")
         assert cai.startswith("sha2-384:")
-        hex_part = cai[len("sha2-384:"):]
+        hex_part = cai[len("sha2-384:") :]
         assert len(hex_part) == 96  # SHA-384 = 48 bytes
 
     def test_sha2_512_algorithm(self) -> None:
         cai = compute_cai(b"hello", algorithm="sha2-512")
         assert cai.startswith("sha2-512:")
-        hex_part = cai[len("sha2-512:"):]
+        hex_part = cai[len("sha2-512:") :]
         assert len(hex_part) == 128  # SHA-512 = 64 bytes
 
     def test_unknown_algorithm_raises(self) -> None:
@@ -116,10 +116,7 @@ class TestComputeKbVersionId:
 
     def test_deterministic_across_calls(self, tmp_path: pathlib.Path) -> None:
         (tmp_path / "data.json").write_text('{"id": "DFT-1001"}')
-        assert (
-            compute_kb_version_id(str(tmp_path))
-            == compute_kb_version_id(str(tmp_path))
-        )
+        assert compute_kb_version_id(str(tmp_path)) == compute_kb_version_id(str(tmp_path))
 
 
 class TestLoadSigningKey:
@@ -150,10 +147,12 @@ class TestEd25519Signing:
     def signing_key(self) -> object:
         pytest.importorskip("cryptography", reason="cryptography not installed")
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
         return Ed25519PrivateKey.generate()
 
     def test_sign_provenance_returns_base64url_string(self, signing_key: object) -> None:
         from mcp_chassis.utils.integrity import sign_provenance
+
         payload = {
             "transaction_id": "test-uuid",
             "tool_name": "solveit_search",
@@ -191,6 +190,7 @@ class TestEd25519Signing:
         # Reconstruct message the same way sign_provenance does
         try:
             import jcs
+
             message = jcs.canonicalize(payload)
         except ImportError:
             message = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
@@ -200,9 +200,12 @@ class TestEd25519Signing:
 
     def test_different_payload_different_signature(self, signing_key: object) -> None:
         from mcp_chassis.utils.integrity import sign_provenance
+
         base = {
-            "transaction_id": "t1", "tool_name": "tool",
-            "tool_version": "1.0.0", "result_cai": "sha2-256:abc",
+            "transaction_id": "t1",
+            "tool_name": "tool",
+            "tool_version": "1.0.0",
+            "result_cai": "sha2-256:abc",
             "timestamp_utc": "2026-06-29T00:00:00.000Z",
         }
         modified = {**base, "result_cai": "sha2-256:def"}
@@ -233,8 +236,10 @@ class TestEd25519Signing:
         assert loaded_key is not None
 
         payload = {
-            "transaction_id": "t", "tool_name": "t",
-            "tool_version": "1.0.0", "result_cai": "sha2-256:abc",
+            "transaction_id": "t",
+            "tool_name": "t",
+            "tool_version": "1.0.0",
+            "result_cai": "sha2-256:abc",
             "timestamp_utc": "2026-06-29T00:00:00.000Z",
         }
         sig = sign_provenance(payload, loaded_key)

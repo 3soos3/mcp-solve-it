@@ -1,6 +1,5 @@
 """Unit tests for mcp_chassis.errors module."""
 
-
 from mcp_chassis.errors import (
     AuthError,
     ChassisError,

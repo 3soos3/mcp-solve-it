@@ -45,9 +45,18 @@ class TestProvenancePresent:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_search", {"keywords": "triage"})
         p = client.prov(data)
-        for field in ("transaction_id", "tool_name", "tool_version", "kb_version_id",
-                      "evidentiary_status", "timestamp_utc", "artifact_id",
-                      "result_cai", "parameters_cai", "result_status"):
+        for field in (
+            "transaction_id",
+            "tool_name",
+            "tool_version",
+            "kb_version_id",
+            "evidentiary_status",
+            "timestamp_utc",
+            "artifact_id",
+            "result_cai",
+            "parameters_cai",
+            "result_status",
+        ):
             assert field in p, f"{fixture_name}: _provenance missing field '{field}'"
 
 
@@ -68,8 +77,7 @@ class TestTransactionId:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         a = client.prov(client.call_tool("solveit_status")).get("transaction_id")
         b = client.prov(client.call_tool("solveit_status")).get("transaction_id")
-        assert a and b and a != b, \
-            f"{fixture_name}: same transaction_id across two calls: {a}"
+        assert a and b and a != b, f"{fixture_name}: same transaction_id across two calls: {a}"
 
 
 class TestEvidentiaryStatus:
@@ -87,18 +95,14 @@ class TestEvidentiaryStatus:
 
 class TestCAIFields:
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
-    def test_parameters_cai_format(
-        self, fixture_name: str, request: pytest.FixtureRequest
-    ) -> None:
+    def test_parameters_cai_format(self, fixture_name: str, request: pytest.FixtureRequest) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_search", {"keywords": "triage"})
         cai = client.prov(data).get("parameters_cai", "")
         assert is_valid_cai(cai), f"{fixture_name}: invalid parameters_cai: {cai}"
 
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
-    def test_artifact_id_format(
-        self, fixture_name: str, request: pytest.FixtureRequest
-    ) -> None:
+    def test_artifact_id_format(self, fixture_name: str, request: pytest.FixtureRequest) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_search", {"keywords": "triage"})
         cai = client.prov(data).get("artifact_id", "")
@@ -111,13 +115,12 @@ class TestCAIFields:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_search", {"keywords": "triage"})
         p = client.prov(data)
-        assert p.get("artifact_id") == p.get("result_cai") and p.get("artifact_id"), \
+        assert p.get("artifact_id") == p.get("result_cai") and p.get("artifact_id"), (
             f"{fixture_name}: artifact_id != result_cai: {p.get('artifact_id')!r}"
+        )
 
     @pytest.mark.parametrize("fixture_name", ["monthly", "version"])
-    def test_kb_version_id_format(
-        self, fixture_name: str, request: pytest.FixtureRequest
-    ) -> None:
+    def test_kb_version_id_format(self, fixture_name: str, request: pytest.FixtureRequest) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_status")
         cai = client.prov(data).get("kb_version_id", "")
@@ -126,9 +129,7 @@ class TestCAIFields:
 
 class TestTimestamp:
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
-    def test_timestamp_is_iso_utc(
-        self, fixture_name: str, request: pytest.FixtureRequest
-    ) -> None:
+    def test_timestamp_is_iso_utc(self, fixture_name: str, request: pytest.FixtureRequest) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         data = client.call_tool("solveit_search", {"keywords": "triage"})
         ts = client.prov(data).get("timestamp_utc", "")
@@ -138,8 +139,9 @@ class TestTimestamp:
         self, version_tech: dict, version: PodmanMCPClient
     ) -> None:
         ts = version.prov(version_tech).get("timestamp_utc", "")
-        assert str(ts).endswith("Z") or str(ts).endswith("+00:00"), \
+        assert str(ts).endswith("Z") or str(ts).endswith("+00:00"), (
             f"FSS-0005 requires UTC timestamp; got {ts!r}"
+        )
 
 
 class TestKBVersionConsistency:
@@ -149,16 +151,14 @@ class TestKBVersionConsistency:
         prov_ver = monthly.prov(data).get("kb_version")
         if env_ver == "unknown":
             pytest.skip("SOLVE_IT_VERSION=unknown — rebuild with make build-monthly")
-        assert prov_ver == env_ver, \
-            f"prov.kb_version={prov_ver!r} != SOLVE_IT_VERSION={env_ver!r}"
+        assert prov_ver == env_ver, f"prov.kb_version={prov_ver!r} != SOLVE_IT_VERSION={env_ver!r}"
 
     def test_different_tools_same_kb_version_id(self, version: PodmanMCPClient) -> None:
         a = version.prov(version.call_tool("solveit_status")).get("kb_version_id")
         b = version.prov(
             version.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
         ).get("kb_version_id")
-        assert a and b and a == b, \
-            "kb_version_id should be stable within the same image"
+        assert a and b and a == b, "kb_version_id should be stable within the same image"
 
     def test_monthly_and_version_both_have_valid_kb_version_ids(
         self, monthly: PodmanMCPClient, version: PodmanMCPClient
@@ -176,11 +176,10 @@ class TestDifferentParamsDifferentCAI:
     def test_different_params_produce_different_parameters_cai(
         self, version: PodmanMCPClient
     ) -> None:
-        a = version.prov(
-            version.call_tool("solveit_search", {"keywords": "memory"})
-        ).get("parameters_cai")
-        b = version.prov(
-            version.call_tool("solveit_search", {"keywords": "acquisition"})
-        ).get("parameters_cai")
-        assert a and b and a != b, \
-            "Different parameters should produce different parameters_cai"
+        a = version.prov(version.call_tool("solveit_search", {"keywords": "memory"})).get(
+            "parameters_cai"
+        )
+        b = version.prov(version.call_tool("solveit_search", {"keywords": "acquisition"})).get(
+            "parameters_cai"
+        )
+        assert a and b and a != b, "Different parameters should produce different parameters_cai"

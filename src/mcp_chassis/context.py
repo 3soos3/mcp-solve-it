@@ -78,9 +78,7 @@ class HandlerContext:
         """
         await self._log("error", logging.ERROR, message, *args)
 
-    async def report_progress(
-        self, progress: float, total: float, message: str = ""
-    ) -> None:
+    async def report_progress(self, progress: float, total: float, message: str = "") -> None:
         """Log a progress update (stub — full MCP progress in future).
 
         Args:
@@ -97,9 +95,7 @@ class HandlerContext:
             extra={"correlation_id": self.correlation_id},
         )
 
-    async def _log(
-        self, mcp_level: str, py_level: int, message: str, *args: object
-    ) -> None:
+    async def _log(self, mcp_level: str, py_level: int, message: str, *args: object) -> None:
         """Write to stderr logger and optionally send an MCP notification.
 
         Args:

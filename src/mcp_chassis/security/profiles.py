@@ -19,7 +19,7 @@ PROFILES: dict[str, dict[str, Any]] = {
             "burst_size": 10,
         },
         "io_limits": {
-            "max_request_size": 1_048_576,   # 1 MB
+            "max_request_size": 1_048_576,  # 1 MB
             "max_response_size": 5_242_880,  # 5 MB
         },
         "input_validation": {
@@ -52,7 +52,7 @@ PROFILES: dict[str, dict[str, Any]] = {
             "burst_size": 20,
         },
         "io_limits": {
-            "max_request_size": 5_242_880,    # 5 MB
+            "max_request_size": 5_242_880,  # 5 MB
             "max_response_size": 20_971_520,  # 20 MB
         },
         "input_validation": {
@@ -120,9 +120,7 @@ def get_profile(name: str) -> dict[str, Any]:
     return copy.deepcopy(PROFILES[name])
 
 
-def merge_profile_with_overrides(
-    profile_name: str, overrides: dict[str, Any]
-) -> dict[str, Any]:
+def merge_profile_with_overrides(profile_name: str, overrides: dict[str, Any]) -> dict[str, Any]:
     """Merge a named profile with user-supplied overrides.
 
     Profile values serve as defaults; overrides take precedence at the

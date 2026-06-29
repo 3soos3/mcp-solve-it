@@ -14,14 +14,12 @@ from .image_configs import BY_TAG, FAST_FAIL
 
 # ── :live ─────────────────────────────────────────────────────────────────────
 
+
 class TestLiveMode:
-    def test_consecutive_calls_different_transaction_ids(
-        self, live: PodmanMCPClient
-    ) -> None:
+    def test_consecutive_calls_different_transaction_ids(self, live: PodmanMCPClient) -> None:
         a = live.prov(live.call_tool("solveit_status")).get("transaction_id")
         b = live.prov(live.call_tool("solveit_status")).get("transaction_id")
-        assert a and b and a != b, \
-            f":live should generate unique transaction_ids per call: {a}"
+        assert a and b and a != b, f":live should generate unique transaction_ids per call: {a}"
 
     def test_live_mode_env(self, live: PodmanMCPClient) -> None:
         assert live.get_env("SOLVE_IT_MODE") == "live"
@@ -31,8 +29,9 @@ class TestLiveMode:
 
     def test_data_url_is_configured(self, live: PodmanMCPClient) -> None:
         url = live.get_env("SOLVE_IT_DATA_URL")
-        assert url and url != "http://0.0.0.0/fail", \
+        assert url and url != "http://0.0.0.0/fail", (
             "The built image must have a real SOLVE_IT_DATA_URL baked in"
+        )
 
     def test_kb_via_volume_mount_is_ok(self, live: PodmanMCPClient) -> None:
         # live fixture already has the volume wired in
@@ -46,12 +45,12 @@ class TestLiveMode:
         """
         client = PodmanMCPClient(image=live_image)  # no FAST_FAIL, no volume
         status = client.call_tool("solveit_status")
-        assert status.get("status") == "ok", \
-            f"Live network fetch failed: {status}"
+        assert status.get("status") == "ok", f"Live network fetch failed: {status}"
         assert isinstance(status.get("techniques"), int) and status["techniques"] >= 100
 
 
 # ── :monthly ──────────────────────────────────────────────────────────────────
+
 
 class TestMonthlyMode:
     def test_monthly_mode_env(self, monthly: PodmanMCPClient) -> None:
@@ -62,11 +61,9 @@ class TestMonthlyMode:
 
     def test_version_env_is_set(self, monthly: PodmanMCPClient) -> None:
         svi = monthly.get_env("SOLVE_IT_VERSION")
-        assert svi and svi != "local-test", \
-            f"SOLVE_IT_VERSION must be set in :monthly, got {svi!r}"
+        assert svi and svi != "local-test", f"SOLVE_IT_VERSION must be set in :monthly, got {svi!r}"
         # Makefile passes main-YYYYMM; older images may have "unknown"
-        assert svi not in ("", "local-test"), \
-            f"SOLVE_IT_VERSION is a build placeholder: {svi!r}"
+        assert svi not in ("", "local-test"), f"SOLVE_IT_VERSION is a build placeholder: {svi!r}"
 
     def test_prov_kb_version_matches_env(self, monthly: PodmanMCPClient) -> None:
         env_ver = monthly.get_env("SOLVE_IT_VERSION")
@@ -77,14 +74,16 @@ class TestMonthlyMode:
                 "SOLVE_IT_VERSION=unknown — rebuild with 'make build-monthly' "
                 "to get a meaningful version label"
             )
-        assert prov_ver == env_ver, \
+        assert prov_ver == env_ver, (
             f"_provenance.kb_version={prov_ver!r} != SOLVE_IT_VERSION={env_ver!r}"
+        )
 
     def test_artifact_id_equals_result_cai(self, monthly: PodmanMCPClient) -> None:
         data = monthly.call_tool("solveit_search", {"keywords": "triage"})
         p = monthly.prov(data)
-        assert p.get("artifact_id") == p.get("result_cai") and p.get("artifact_id"), \
+        assert p.get("artifact_id") == p.get("result_cai") and p.get("artifact_id"), (
             "monthly: artifact_id must equal result_cai"
+        )
 
     def test_no_network_needed(self, monthly_image: str) -> None:
         """Bundled KB — must work with no volume and a broken data URL."""
@@ -93,11 +92,11 @@ class TestMonthlyMode:
             extra_env=(FAST_FAIL,),
         )
         status = client.call_tool("solveit_status")
-        assert status.get("status") == "ok", \
-            f":monthly should not need network or volume: {status}"
+        assert status.get("status") == "ok", f":monthly should not need network or volume: {status}"
 
 
 # ── :version ──────────────────────────────────────────────────────────────────
+
 
 class TestVersionMode:
     def test_release_mode_env(self, version: PodmanMCPClient) -> None:
@@ -113,53 +112,57 @@ class TestVersionMode:
     def test_exact_technique_count(self, version: PodmanMCPClient) -> None:
         cfg = BY_TAG["version"]
         status = version.call_tool("solveit_status")
-        assert status.get("techniques") == cfg.exact_counts["techniques"], \
+        assert status.get("techniques") == cfg.exact_counts["techniques"], (
             f"Expected {cfg.exact_counts['techniques']}, got {status.get('techniques')}"
+        )
 
     def test_exact_weakness_count(self, version: PodmanMCPClient) -> None:
         cfg = BY_TAG["version"]
         status = version.call_tool("solveit_status")
-        assert status.get("weaknesses") == cfg.exact_counts["weaknesses"], \
+        assert status.get("weaknesses") == cfg.exact_counts["weaknesses"], (
             f"Expected {cfg.exact_counts['weaknesses']}, got {status.get('weaknesses')}"
+        )
 
     def test_exact_mitigation_count(self, version: PodmanMCPClient) -> None:
         cfg = BY_TAG["version"]
         status = version.call_tool("solveit_status")
-        assert status.get("mitigations") == cfg.exact_counts["mitigations"], \
+        assert status.get("mitigations") == cfg.exact_counts["mitigations"], (
             f"Expected {cfg.exact_counts['mitigations']}, got {status.get('mitigations')}"
+        )
 
-    def test_identical_params_identical_artifact_id(
-        self, version: PodmanMCPClient
-    ) -> None:
+    def test_identical_params_identical_artifact_id(self, version: PodmanMCPClient) -> None:
         a = version.prov(
             version.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
         ).get("artifact_id")
         b = version.prov(
             version.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
         ).get("artifact_id")
-        assert a and b and a == b, \
+        assert a and b and a == b, (
             f":version must be deterministic — artifact_id differs: {a} vs {b}"
+        )
 
     def test_evidentiary_status_is_evidentiary(self, version: PodmanMCPClient) -> None:
         data = version.call_tool("solveit_search", {"keywords": "triage"})
         status = version.prov(data).get("evidentiary_status")
-        assert status == "evidentiary", \
+        assert status == "evidentiary", (
             f":version should be evidentiary (FORENSIC_METADATA=true), got {status!r}"
+        )
 
     def test_artifact_id_equals_result_cai(self, version: PodmanMCPClient) -> None:
         data = version.call_tool("solveit_search", {"keywords": "triage"})
         p = version.prov(data)
-        assert p.get("artifact_id") == p.get("result_cai") and p.get("artifact_id"), \
+        assert p.get("artifact_id") == p.get("result_cai") and p.get("artifact_id"), (
             "version: artifact_id must equal result_cai"
+        )
 
     def test_no_network_needed(self, version_image: str) -> None:
         client = PodmanMCPClient(image=version_image, extra_env=(FAST_FAIL,))
         status = client.call_tool("solveit_status")
-        assert status.get("status") == "ok", \
-            f":version should not need network: {status}"
+        assert status.get("status") == "ok", f":version should not need network: {status}"
 
 
 # ── Cross-image ───────────────────────────────────────────────────────────────
+
 
 class TestCrossImageConsistency:
     def test_monthly_and_version_have_distinct_kb_version_ids(
@@ -184,5 +187,6 @@ class TestCrossImageConsistency:
         for label, client in (("live", live), ("monthly", monthly), ("version", version)):
             data = client.call_tool("solveit_get_technique", {"technique_id": "DFT-1001"})
             name = client.unwrap(data).get("name")
-            assert isinstance(name, str) and name.strip(), \
+            assert isinstance(name, str) and name.strip(), (
                 f"{label}: DFT-1001 must return a non-empty name, got {name!r}"
+            )

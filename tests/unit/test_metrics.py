@@ -12,33 +12,39 @@ class TestMCPMetricsWithoutOTel:
 
     def test_get_metrics_returns_instance(self) -> None:
         from mcp_chassis.utils.metrics import MCPMetrics, get_metrics
+
         m = get_metrics()
         assert isinstance(m, MCPMetrics)
 
     def test_get_metrics_is_singleton(self) -> None:
         from mcp_chassis.utils.metrics import get_metrics
+
         assert get_metrics() is get_metrics()
 
     def test_record_call_start_returns_float(self) -> None:
         from mcp_chassis.utils.metrics import get_metrics
+
         t = get_metrics().record_call_start("solveit_status")
         assert isinstance(t, float)
         assert t > 0
 
     def test_record_call_end_does_not_raise(self) -> None:
         from mcp_chassis.utils.metrics import get_metrics
+
         m = get_metrics()
         start = m.record_call_start("solveit_search")
         m.record_call_end("solveit_search", start)
 
     def test_record_call_end_with_error_does_not_raise(self) -> None:
         from mcp_chassis.utils.metrics import get_metrics
+
         m = get_metrics()
         start = m.record_call_start("solveit_get_technique")
         m.record_call_end("solveit_get_technique", start, error_code="FSS_PARAM_INVALID")
 
     def test_record_call_start_returns_monotonic_time(self) -> None:
         from mcp_chassis.utils.metrics import get_metrics
+
         m = get_metrics()
         t1 = m.record_call_start("tool_a")
         time.sleep(0.001)
@@ -47,6 +53,7 @@ class TestMCPMetricsWithoutOTel:
 
     def test_duration_is_positive(self) -> None:
         from mcp_chassis.utils.metrics import get_metrics
+
         m = get_metrics()
         start = m.record_call_start("tool")
         time.sleep(0.002)
@@ -73,12 +80,12 @@ class TestMCPMetricsWithOTel:
         mock_counter.add.side_effect = lambda n, attrs: counts["call_counter"].append((n, attrs))
 
         mock_histogram = MagicMock()
-        mock_histogram.record.side_effect = (
-            lambda n, attrs: counts["duration_histogram"].append((n, attrs))
+        mock_histogram.record.side_effect = lambda n, attrs: counts["duration_histogram"].append(
+            (n, attrs)
         )
         mock_err_counter = MagicMock()
-        mock_err_counter.add.side_effect = (
-            lambda n, attrs: counts["error_counter"].append((n, attrs))
+        mock_err_counter.add.side_effect = lambda n, attrs: counts["error_counter"].append(
+            (n, attrs)
         )
 
         mock_meter_obj = MagicMock()
@@ -121,6 +128,7 @@ class TestMCPMetricsWithOTel:
 
         with patch("mcp_chassis.utils.telemetry.get_telemetry", return_value=mock_telemetry):
             from mcp_chassis.utils.metrics import MCPMetrics
+
             m = MCPMetrics()
             m.record_call_start("solveit_status")
 
@@ -145,6 +153,7 @@ class TestMCPMetricsWithOTel:
 
         with patch("mcp_chassis.utils.telemetry.get_telemetry", return_value=mock_telemetry):
             from mcp_chassis.utils.metrics import MCPMetrics
+
             m = MCPMetrics()
             start = m.record_call_start("solveit_search")
             m.record_call_end("solveit_search", start)
@@ -155,9 +164,7 @@ class TestMCPMetricsWithOTel:
         assert duration_ms >= 0
         assert call_args[0][1] == {"tool.name": "solveit_search"}
 
-    def test_error_counter_incremented_on_error_code(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_error_counter_incremented_on_error_code(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import MagicMock, patch
 
         mock_counter = MagicMock()
@@ -176,6 +183,7 @@ class TestMCPMetricsWithOTel:
 
         with patch("mcp_chassis.utils.telemetry.get_telemetry", return_value=mock_telemetry):
             from mcp_chassis.utils.metrics import MCPMetrics
+
             m = MCPMetrics()
             start = m.record_call_start("solveit_get_technique")
             m.record_call_end("solveit_get_technique", start, error_code="FSS_PARAM_INVALID")
@@ -185,9 +193,7 @@ class TestMCPMetricsWithOTel:
         assert call_args[0][0] == 1
         assert call_args[0][1].get("error.code") == "FSS_PARAM_INVALID"
 
-    def test_no_error_counter_call_without_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_no_error_counter_call_without_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import MagicMock, patch
 
         mock_counter = MagicMock()
@@ -206,6 +212,7 @@ class TestMCPMetricsWithOTel:
 
         with patch("mcp_chassis.utils.telemetry.get_telemetry", return_value=mock_telemetry):
             from mcp_chassis.utils.metrics import MCPMetrics
+
             m = MCPMetrics()
             start = m.record_call_start("solveit_status")
             m.record_call_end("solveit_status", start)  # no error_code
@@ -221,6 +228,7 @@ class TestMCPMetricsWithOTel:
 
         with patch("mcp_chassis.utils.telemetry.get_telemetry", return_value=mock_telemetry):
             from mcp_chassis.utils.metrics import MCPMetrics
+
             m = MCPMetrics()
             assert m._call_counter is None
             assert m._duration_histogram is None

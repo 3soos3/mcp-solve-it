@@ -46,17 +46,13 @@ class TestLoadEnvFile:
         _load_env_file(env_file)
         assert os.environ["GOOD_KEY"] == "val"
 
-    def test_strips_double_quotes(
-        self, env_file: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_strips_double_quotes(self, env_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         env_file.write_text('QUOTED_KEY="quoted value"\n')
         monkeypatch.delenv("QUOTED_KEY", raising=False)
         _load_env_file(env_file)
         assert os.environ["QUOTED_KEY"] == "quoted value"
 
-    def test_strips_single_quotes(
-        self, env_file: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_strips_single_quotes(self, env_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         env_file.write_text("SINGLE_Q='single quoted'\n")
         monkeypatch.delenv("SINGLE_Q", raising=False)
         _load_env_file(env_file)
@@ -70,17 +66,13 @@ class TestLoadEnvFile:
         _load_env_file(env_file)
         assert os.environ["EXISTING_KEY"] == "already_set"
 
-    def test_strips_export_prefix(
-        self, env_file: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_strips_export_prefix(self, env_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         env_file.write_text("export EXPORTED_KEY=exported_val\n")
         monkeypatch.delenv("EXPORTED_KEY", raising=False)
         _load_env_file(env_file)
         assert os.environ["EXPORTED_KEY"] == "exported_val"
 
-    def test_value_with_equals_sign(
-        self, env_file: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_value_with_equals_sign(self, env_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         env_file.write_text("URL_KEY=https://example.com?a=1&b=2\n")
         monkeypatch.delenv("URL_KEY", raising=False)
         _load_env_file(env_file)

@@ -140,9 +140,7 @@ class TestPromptsList:
         assert isinstance(prompts, list)
 
     @pytest.mark.asyncio
-    async def test_prompts_list_prompt_has_required_fields(
-        self, mcp_client: MCPTestClient
-    ) -> None:
+    async def test_prompts_list_prompt_has_required_fields(self, mcp_client: MCPTestClient) -> None:
         """Each prompt should have name and optionally description and arguments."""
         response = await mcp_client.send_request("prompts/list")
         prompts = response["result"]["prompts"]

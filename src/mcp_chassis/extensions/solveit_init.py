@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 # ── Typed app config ────────────────────────────────────────────────────
 
+
 @dataclass
 class SearchConfig:
     """Typed configuration for ``[app.search]``."""
@@ -73,9 +74,9 @@ class SolveItAppConfig:
         for key in raw:
             if key not in known_keys:
                 logger.warning(
-                    "Unrecognized [app] config key: '%s'. "
-                    "Known keys: %s",
-                    key, ", ".join(sorted(known_keys)),
+                    "Unrecognized [app] config key: '%s'. Known keys: %s",
+                    key,
+                    ", ".join(sorted(known_keys)),
                 )
 
         # Build nested search config
@@ -91,7 +92,9 @@ class SolveItAppConfig:
             objective_mapping=raw.get("objective_mapping", cls.objective_mapping),
             enable_extensions=raw.get("enable_extensions", cls.enable_extensions),
             init_required=raw.get("init_required", cls.init_required),
-            enable_full_detail_tools=raw.get("enable_full_detail_tools", cls.enable_full_detail_tools),  # noqa: E501
+            enable_full_detail_tools=raw.get(
+                "enable_full_detail_tools", cls.enable_full_detail_tools
+            ),  # noqa: E501
             search=search,
         )
 
@@ -132,6 +135,7 @@ def _apply_env_overrides(app_config: dict[str, Any]) -> None:
 
 
 # ── Init hook ───────────────────────────────────────────────────────────
+
 
 def on_init(server: ChassisServer) -> None:
     """Load the SOLVE-IT KnowledgeBase and attach it to the server.
@@ -178,6 +182,7 @@ def on_init(server: ChassisServer) -> None:
         server._kb_version = kb_version
         try:
             from mcp_chassis.utils.integrity import compute_kb_version_id
+
             server._kb_version_id = compute_kb_version_id(str(data_path))
             logger.info("KB version CAI: %s", server._kb_version_id)
         except Exception as exc:
@@ -190,8 +195,13 @@ def on_init(server: ChassisServer) -> None:
         logger.info(
             "SOLVE-IT KB loaded: %d techniques, %d weaknesses, %d mitigations "
             "(path: %s, mapping: %s, extensions: %s, version: %s)",
-            n_t, n_w, n_m, data_path, config.objective_mapping,
-            config.enable_extensions, kb_version,
+            n_t,
+            n_w,
+            n_m,
+            data_path,
+            config.objective_mapping,
+            config.enable_extensions,
+            kb_version,
         )
     except Exception as exc:
         msg = f"Failed to load SOLVE-IT KB from '{data_path}': {exc}"

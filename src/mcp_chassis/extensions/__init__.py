@@ -47,8 +47,7 @@ def _check_file_permissions(file_path: Path) -> bool:
     """
     if sys.platform == "win32":
         logger.debug(
-            "Skipping permission check for '%s' — "
-            "S_IWOTH is not meaningful on Windows",
+            "Skipping permission check for '%s' — S_IWOTH is not meaningful on Windows",
             file_path,
         )
         return True
@@ -56,9 +55,7 @@ def _check_file_permissions(file_path: Path) -> bool:
     try:
         file_stat = file_path.stat()
     except OSError as exc:
-        logger.warning(
-            "Cannot stat extension file '%s', skipping: %s", file_path, exc
-        )
+        logger.warning("Cannot stat extension file '%s', skipping: %s", file_path, exc)
         return False
 
     if file_stat.st_mode & stat.S_IWOTH:
@@ -102,7 +99,8 @@ def discover_extensions(server: ChassisServer) -> None:
             if not _VALID_MODULE_NAME_RE.match(stem):
                 logger.warning(
                     "Skipping extension '%s': invalid module name '%s'",
-                    module_path, stem,
+                    module_path,
+                    stem,
                 )
                 continue
 
@@ -113,9 +111,7 @@ def discover_extensions(server: ChassisServer) -> None:
             _load_extension(module_name, module_path, server)
 
 
-def _load_extension(
-    module_name: str, file_path: Path, server: ChassisServer
-) -> None:
+def _load_extension(module_name: str, file_path: Path, server: ChassisServer) -> None:
     """Import a single extension module and call its register() function.
 
     Args:

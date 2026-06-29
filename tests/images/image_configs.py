@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 # ── Volume / env shorthands ───────────────────────────────────────────────────
 
 SOLVEIT_VOL = "SOLVE_IT_DATA_PATH:/tmp/app-cache/solve-it:ro,Z"
-FAST_FAIL   = "SOLVE_IT_DATA_URL=http://0.0.0.0/fail"
-DEGRADED    = "MCP_APP_INIT_REQUIRED=false"
+FAST_FAIL = "SOLVE_IT_DATA_URL=http://0.0.0.0/fail"
+DEGRADED = "MCP_APP_INIT_REQUIRED=false"
 
 
 @dataclass(frozen=True)

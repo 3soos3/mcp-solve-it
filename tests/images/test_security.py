@@ -19,6 +19,7 @@ import pytest
 
 # ── Persistent MCP session over stdio ─────────────────────────────────────────
 
+
 class PodmanMCPSession:
     """Keep one container alive and dispatch multiple MCP requests to it.
 
@@ -55,13 +56,18 @@ class PodmanMCPSession:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        self._send({
-            "jsonrpc": "2.0", "id": 1, "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05", "capabilities": {},
-                "clientInfo": {"name": "pytest-session", "version": "1.0"},
-            },
-        })
+        self._send(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "pytest-session", "version": "1.0"},
+                },
+            }
+        )
         self._read_until_id(1, timeout=20)
         self._send({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
         self._next_id = 2
@@ -89,12 +95,14 @@ class PodmanMCPSession:
 
     def _readline_timeout(self, timeout: float) -> bytes | None:
         result: list[bytes | None] = [None]
+
         def _r() -> None:
             try:
                 assert self._proc and self._proc.stdout
                 result[0] = self._proc.stdout.readline()
             except Exception:
                 pass
+
         t = threading.Thread(target=_r, daemon=True)
         t.start()
         t.join(timeout)
@@ -119,14 +127,22 @@ class PodmanMCPSession:
     def call_tool(self, name: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
         req_id = self._next_id
         self._next_id += 1
-        self._send({
-            "jsonrpc": "2.0", "id": req_id, "method": "tools/call",
-            "params": {"name": name, "arguments": args or {}},
-        })
+        self._send(
+            {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": args or {}},
+            }
+        )
         resp = self._read_until_id(req_id, timeout=self.timeout)
         content = resp.get("result", {}).get("content", [])
         if not content:
-            return {"_error": "empty content", "_raw": resp, "_is_error": resp.get("result", {}).get("isError")}  # noqa: E501
+            return {
+                "_error": "empty content",
+                "_raw": resp,
+                "_is_error": resp.get("result", {}).get("isError"),
+            }  # noqa: E501
         try:
             parsed = json.loads(content[0]["text"])
             if resp.get("result", {}).get("isError"):
@@ -150,6 +166,7 @@ def _session(
 
 
 # ── Rate limiting tests ────────────────────────────────────────────────────────
+
 
 @pytest.mark.slow
 class TestRateLimiting:
@@ -186,8 +203,9 @@ class TestRateLimiting:
                 pytest.skip("Rate limit not triggered in 70 calls — check config")
 
             raw_text = rate_limited.get("_raw_text", "")
-            assert "RATE_LIMIT" in raw_text or rate_limited.get("_is_tool_error"), \
+            assert "RATE_LIMIT" in raw_text or rate_limited.get("_is_tool_error"), (
                 f"Expected RATE_LIMIT code, got: {rate_limited}"
+            )
 
     def test_different_tools_share_global_limit(self, version_image: str) -> None:
         """The global_rpm=120 limit applies across all tool calls."""
@@ -200,11 +218,11 @@ class TestRateLimiting:
                 if result.get("_is_tool_error") or "RATE_LIMIT" in str(result):
                     errors += 1
 
-            assert errors > 0, \
-                "Expected global rate limit to trigger within 130 cross-tool calls"
+            assert errors > 0, "Expected global rate limit to trigger within 130 cross-tool calls"
 
 
 # ── Request size limit tests ───────────────────────────────────────────────────
+
 
 class TestRequestSizeLimits:
     """The moderate security profile sets max_request_size=5 MB.
@@ -221,24 +239,22 @@ class TestRequestSizeLimits:
         raw = result.get("_raw_text", "") + str(result.get("_raw", "")) + str(result)
         connection_closed = "no response with id=" in raw or "no id=2 response" in raw
         is_error = (
-            result.get("_is_tool_error")
-            or "IO_LIMIT" in raw
-            or "VALID" in raw
-            or connection_closed
+            result.get("_is_tool_error") or "IO_LIMIT" in raw or "VALID" in raw or connection_closed
         )
-        assert is_error, \
-            f"Expected size-limit rejection for 6 MB payload, got: {str(result)[:200]}"
+        assert is_error, f"Expected size-limit rejection for 6 MB payload, got: {str(result)[:200]}"
 
     def test_normal_size_request_succeeds(self, version_image: str) -> None:
         with _session(version_image) as sess:
             result = sess.call_tool("solveit_search", {"keywords": "forensic"})
-        assert "_is_tool_error" not in result or not result["_is_tool_error"], \
+        assert "_is_tool_error" not in result or not result["_is_tool_error"], (
             f"Normal request should not be rejected: {result}"
+        )
 
     def test_boundary_request_near_limit(self, version_image: str) -> None:
         """A request just under the 10 000-char string limit should succeed."""
         keyword = "forensic " * 1000  # ~9000 chars
         with _session(version_image) as sess:
             result = sess.call_tool("solveit_search", {"keywords": keyword})
-        assert not (result.get("_is_tool_error") and "IO_LIMIT" in str(result)), \
+        assert not (result.get("_is_tool_error") and "IO_LIMIT" in str(result)), (
             f"Request near limit should not be size-rejected: {str(result)[:200]}"
+        )

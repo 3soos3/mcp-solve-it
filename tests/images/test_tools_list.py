@@ -44,9 +44,7 @@ _KNOWN_KB_TOOLS = {
 
 class TestToolCount:
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
-    def test_at_least_24_tools(
-        self, fixture_name: str, request: pytest.FixtureRequest
-    ) -> None:
+    def test_at_least_24_tools(self, fixture_name: str, request: pytest.FixtureRequest) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         names = client.tool_names()
         assert len(names) >= 24, f"{fixture_name} exposed only {len(names)} tools: {names}"
@@ -63,8 +61,9 @@ class TestToolSchema:
             assert "name" in tool, f"Tool missing 'name': {tool}"
             assert "description" in tool, f"Tool {tool.get('name')} missing 'description'"
             assert "inputSchema" in tool, f"Tool {tool.get('name')} missing 'inputSchema'"
-            assert isinstance(tool["description"], str) and tool["description"].strip(), \
+            assert isinstance(tool["description"], str) and tool["description"].strip(), (
                 f"Tool {tool.get('name')} has empty description"
+            )
 
 
 class TestHealthCheck:
@@ -76,9 +75,7 @@ class TestHealthCheck:
         assert "__health_check" in client.tool_names()
 
     @pytest.mark.parametrize("fixture_name", ["live", "monthly", "version"])
-    def test_health_check_callable(
-        self, fixture_name: str, request: pytest.FixtureRequest
-    ) -> None:
+    def test_health_check_callable(self, fixture_name: str, request: pytest.FixtureRequest) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         result = client.call_tool("__health_check")
         assert "_error" not in result
@@ -95,8 +92,7 @@ class TestKnownKBTools:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
         names = client.tool_names()
         missing = _KNOWN_KB_TOOLS - names
-        assert not missing, \
-            f"{fixture_name} is missing expected tools: {sorted(missing)}"
+        assert not missing, f"{fixture_name} is missing expected tools: {sorted(missing)}"
 
 
 class TestFSSSchemaAnnotations:
@@ -106,25 +102,20 @@ class TestFSSSchemaAnnotations:
     def version_tools(self, version: PodmanMCPClient) -> dict[str, dict]:
         return {t["name"]: t for t in version.list_tools()}
 
-    def test_get_technique_fss_tool_version(
-        self, version_tools: dict[str, dict]
-    ) -> None:
+    def test_get_technique_fss_tool_version(self, version_tools: dict[str, dict]) -> None:
         schema = version_tools["solveit_get_technique"].get("inputSchema", {})
-        assert schema.get("x-fss-tool-version") == "1.0.0", \
+        assert schema.get("x-fss-tool-version") == "1.0.0", (
             f"x-fss-tool-version not set: {schema.get('x-fss-tool-version')}"
+        )
 
-    def test_get_technique_fss_idempotent(
-        self, version_tools: dict[str, dict]
-    ) -> None:
+    def test_get_technique_fss_idempotent(self, version_tools: dict[str, dict]) -> None:
         schema = version_tools["solveit_get_technique"].get("inputSchema", {})
         assert schema.get("x-fss-idempotent") is True
 
-    def test_multiple_tools_have_fss_annotations(
-        self, version_tools: dict[str, dict]
-    ) -> None:
+    def test_multiple_tools_have_fss_annotations(self, version_tools: dict[str, dict]) -> None:
         annotated = [
-            name for name, tool in version_tools.items()
+            name
+            for name, tool in version_tools.items()
             if tool.get("inputSchema", {}).get("x-fss-tool-version")
         ]
-        assert len(annotated) >= 3, \
-            f"Expected ≥3 tools with x-fss-tool-version, got {annotated}"
+        assert len(annotated) >= 3, f"Expected ≥3 tools with x-fss-tool-version, got {annotated}"

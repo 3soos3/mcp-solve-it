@@ -25,36 +25,39 @@ from .image_configs import LIVE, MONTHLY, VERSION, ImageConfig
 
 # ── Regex helpers ─────────────────────────────────────────────────────────────
 
-UUID_V4_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-)
+UUID_V4_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 CAI_RE = re.compile(r"^sha2-256:[0-9a-f]{64}$")
 ISO_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|\+00:00)$")
 
 
 # ── pytest hooks ─────────────────────────────────────────────────────────────
 
+
 def pytest_addoption(parser: pytest.Parser) -> None:
-    parser.addoption("--live-image",    default="solve-it-mcp:live",
-                     help="Podman image tag for the :live variant")
-    parser.addoption("--monthly-image", default="solve-it-mcp:monthly",
-                     help="Podman image tag for the :monthly variant")
-    parser.addoption("--version-image", default="solve-it-mcp:version",
-                     help="Podman image tag for the :version variant")
+    parser.addoption(
+        "--live-image", default="solve-it-mcp:live", help="Podman image tag for the :live variant"
+    )
+    parser.addoption(
+        "--monthly-image",
+        default="solve-it-mcp:monthly",
+        help="Podman image tag for the :monthly variant",
+    )
+    parser.addoption(
+        "--version-image",
+        default="solve-it-mcp:version",
+        help="Podman image tag for the :version variant",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    config.addinivalue_line("markers",
-        "network: requires live network access to SOLVE_IT_DATA_URL")
-    config.addinivalue_line("markers",
-        "slow: test spawns multiple containers or is otherwise slow")
-    config.addinivalue_line("markers",
-        "auth: authentication and token behaviour tests")
-    config.addinivalue_line("markers",
-        "crypto: cryptographic hash verification tests")
+    config.addinivalue_line("markers", "network: requires live network access to SOLVE_IT_DATA_URL")
+    config.addinivalue_line("markers", "slow: test spawns multiple containers or is otherwise slow")
+    config.addinivalue_line("markers", "auth: authentication and token behaviour tests")
+    config.addinivalue_line("markers", "crypto: cryptographic hash verification tests")
 
 
 # ── Image existence check ─────────────────────────────────────────────────────
+
 
 def _image_exists(tag: str) -> bool:
     r = subprocess.run(["podman", "image", "exists", tag], capture_output=True)
@@ -62,6 +65,7 @@ def _image_exists(tag: str) -> bool:
 
 
 # ── PodmanMCPClient ───────────────────────────────────────────────────────────
+
 
 class PodmanMCPClient:
     """Synchronous MCP client that spawns one ``podman run`` container per call.
@@ -97,9 +101,18 @@ class PodmanMCPClient:
     def get_env(self, var: str) -> str:
         """Read an environment variable baked into the image."""
         r = subprocess.run(
-            ["podman", "run", "--rm", "--entrypoint", "/bin/sh",
-             self.image, "-c", f'echo "${var}"'],
-            capture_output=True, timeout=15,
+            [
+                "podman",
+                "run",
+                "--rm",
+                "--entrypoint",
+                "/bin/sh",
+                self.image,
+                "-c",
+                f'echo "${var}"',
+            ],
+            capture_output=True,
+            timeout=15,
         )
         return r.stdout.decode().strip()
 
@@ -157,14 +170,18 @@ class PodmanMCPClient:
                 pass
 
         try:
-            _send({
-                "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": {"name": "pytest-image-test", "version": "1.0"},
-                },
-            })
+            _send(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "pytest-image-test", "version": "1.0"},
+                    },
+                }
+            )
 
             raw = self._readline_timeout(proc, timeout=15)
             if not raw:
@@ -224,9 +241,7 @@ class PodmanMCPClient:
         On success the dict may contain ``_provenance`` and ``result`` keys.
         On failure ``_error`` is set (key always present for errors).
         """
-        resp = self._run_mcp(
-            "tools/call", {"name": name, "arguments": args or {}}, **kwargs
-        )
+        resp = self._run_mcp("tools/call", {"name": name, "arguments": args or {}}, **kwargs)
         result_block = resp.get("result", {})
         content = result_block.get("content", [])
         if not content:
@@ -285,8 +300,7 @@ class PodmanMCPClient:
             return data
         if "result" in data and "_provenance" in data:
             return data["result"]
-        return {k: v for k, v in data.items()
-                if k not in ("_provenance", "_is_tool_error")}
+        return {k: v for k, v in data.items() if k not in ("_provenance", "_is_tool_error")}
 
     @staticmethod
     def is_tool_not_found(data: dict[str, Any]) -> bool:
@@ -295,6 +309,7 @@ class PodmanMCPClient:
 
 
 # ── CAI / UUID helpers (importable by tests) ──────────────────────────────────
+
 
 def is_valid_cai(value: object) -> bool:
     """Validate sha2-256 CAI format: 'sha2-256:' + exactly 64 lowercase hex chars."""
@@ -321,6 +336,7 @@ def is_valid_iso_utc(value: object) -> bool:
 
 
 # ── Session-scoped image fixtures ─────────────────────────────────────────────
+
 
 @pytest.fixture(scope="session")
 def live_image(request: pytest.FixtureRequest) -> str:
@@ -367,6 +383,7 @@ def version(version_image: str) -> PodmanMCPClient:
 
 
 # ── Parametrised multi-image fixtures ────────────────────────────────────────
+
 
 @pytest.fixture(params=["live", "monthly", "version"])
 def any_client(request: pytest.FixtureRequest) -> PodmanMCPClient:

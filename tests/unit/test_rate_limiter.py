@@ -1,6 +1,5 @@
 """Unit tests for mcp_chassis.security.rate_limiter module."""
 
-
 import pytest
 
 from mcp_chassis.config import RateLimitConfig
@@ -31,18 +30,14 @@ class TestRateLimiterEnabled:
     """Tests for rate limiter when enabled."""
 
     def test_allows_within_burst(self) -> None:
-        config = RateLimitConfig(
-            enabled=True, global_rpm=60, per_tool_rpm=30, burst_size=5
-        )
+        config = RateLimitConfig(enabled=True, global_rpm=60, per_tool_rpm=30, burst_size=5)
         limiter = RateLimiter(config)
         for i in range(5):
             result = limiter.check("my_tool")
             assert result.allowed, f"Request {i} should be allowed"
 
     def test_blocks_after_burst_exhausted(self) -> None:
-        config = RateLimitConfig(
-            enabled=True, global_rpm=60, per_tool_rpm=30, burst_size=3
-        )
+        config = RateLimitConfig(enabled=True, global_rpm=60, per_tool_rpm=30, burst_size=3)
         limiter = RateLimiter(config)
         # Exhaust burst
         for _ in range(3):
@@ -52,9 +47,7 @@ class TestRateLimiterEnabled:
         assert not result.allowed
 
     def test_denied_result_has_retry_after(self) -> None:
-        config = RateLimitConfig(
-            enabled=True, global_rpm=60, per_tool_rpm=6, burst_size=1
-        )
+        config = RateLimitConfig(enabled=True, global_rpm=60, per_tool_rpm=6, burst_size=1)
         limiter = RateLimiter(config)
         limiter.check("tool")  # consume the burst token
         result = limiter.check("tool")
@@ -62,9 +55,7 @@ class TestRateLimiterEnabled:
         assert result.retry_after > 0
 
     def test_denied_result_has_reason(self) -> None:
-        config = RateLimitConfig(
-            enabled=True, global_rpm=60, per_tool_rpm=6, burst_size=1
-        )
+        config = RateLimitConfig(enabled=True, global_rpm=60, per_tool_rpm=6, burst_size=1)
         limiter = RateLimiter(config)
         limiter.check("tool")
         result = limiter.check("tool")
@@ -74,9 +65,7 @@ class TestRateLimiterEnabled:
     def test_different_tools_have_separate_buckets(self) -> None:
         # Per-tool bucket is 2 tokens; global bucket is 20 tokens
         # Exhaust tool_a's per-tool bucket (2 requests), then tool_b still has tokens
-        config = RateLimitConfig(
-            enabled=True, global_rpm=600, per_tool_rpm=3, burst_size=2
-        )
+        config = RateLimitConfig(enabled=True, global_rpm=600, per_tool_rpm=3, burst_size=2)
         limiter = RateLimiter(config)
         # Override global bucket to have more capacity than per-tool
         assert limiter._global_bucket is not None
@@ -99,9 +88,7 @@ class TestRateLimiterEnabled:
         exhausted (0 tokens) while global still has 17. Subsequent denied requests
         to tool_a must NOT consume those 17 global tokens.
         """
-        config = RateLimitConfig(
-            enabled=True, global_rpm=600, per_tool_rpm=3, burst_size=3
-        )
+        config = RateLimitConfig(enabled=True, global_rpm=600, per_tool_rpm=3, burst_size=3)
         limiter = RateLimiter(config)
 
         # Give global bucket more capacity so it outlasts per-tool
@@ -128,9 +115,7 @@ class TestRateLimiterEnabled:
         )
 
     def test_global_limit_applies_across_tools(self) -> None:
-        config = RateLimitConfig(
-            enabled=True, global_rpm=6, per_tool_rpm=600, burst_size=3
-        )
+        config = RateLimitConfig(enabled=True, global_rpm=6, per_tool_rpm=600, burst_size=3)
         limiter = RateLimiter(config)
         # Exhaust global bucket via different tools
         limiter.check("tool_a")
@@ -145,9 +130,7 @@ class TestRateLimiterReset:
     """Tests for rate limiter reset functionality."""
 
     def test_reset_refills_buckets(self) -> None:
-        config = RateLimitConfig(
-            enabled=True, global_rpm=60, per_tool_rpm=3, burst_size=3
-        )
+        config = RateLimitConfig(enabled=True, global_rpm=60, per_tool_rpm=3, burst_size=3)
         limiter = RateLimiter(config)
         # Exhaust
         for _ in range(3):
@@ -161,9 +144,7 @@ class TestRateLimiterReset:
         assert result.allowed
 
     def test_reset_clears_per_tool_state(self) -> None:
-        config = RateLimitConfig(
-            enabled=True, global_rpm=600, per_tool_rpm=1, burst_size=1
-        )
+        config = RateLimitConfig(enabled=True, global_rpm=600, per_tool_rpm=1, burst_size=1)
         limiter = RateLimiter(config)
         limiter.check("my_tool")
         limiter.reset()
@@ -174,9 +155,7 @@ class TestTokenRefill:
     """Tests for token bucket refill over time."""
 
     def test_tokens_refill_after_time(self) -> None:
-        config = RateLimitConfig(
-            enabled=True, global_rpm=600, per_tool_rpm=600, burst_size=1
-        )
+        config = RateLimitConfig(enabled=True, global_rpm=600, per_tool_rpm=600, burst_size=1)
         limiter = RateLimiter(config)
         # Consume the token
         first = limiter.check("tool")
@@ -198,9 +177,7 @@ class TestCheckRateLimitHelper:
     """Tests for check_rate_limit convenience function."""
 
     def test_raises_when_exceeded(self) -> None:
-        config = RateLimitConfig(
-            enabled=True, global_rpm=60, per_tool_rpm=3, burst_size=1
-        )
+        config = RateLimitConfig(enabled=True, global_rpm=60, per_tool_rpm=3, burst_size=1)
         limiter = RateLimiter(config)
         limiter.check("tool")  # consume
         with pytest.raises(RateLimitError):
