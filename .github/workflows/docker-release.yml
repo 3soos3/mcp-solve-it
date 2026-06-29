@@ -1,21 +1,30 @@
-name: Docker - Build & Publish Release
+name: Docker - Build & Publish :<version>
 
-# Builds and publishes versioned release images on git tags matching v*.*.*.
-# Multi-arch: linux/amd64, linux/arm64, linux/arm/v7.
-# Uses Dockerfile.release. Tags :v<version> and :latest on GHCR.
-# Post-publish: Trivy scan (all arches), Cosign sign, SBOM, SLSA provenance.
-# SBOM retention: forever (0 days).
+# Builds versioned release images with compound tag v{mcp}-si{solveit}.
+# Two triggers:
+#   1. Git tag push (v*.*.*) — new MCP release, pair with latest SOLVE-IT release
+#   2. Weekly schedule — detect new SOLVE-IT releases, rebuild with current MCP
+#
+# Tags: v{mcp}-si{solveit} on GHCR + Docker Hub.  :latest also updated.
+# Post-publish: Trivy scan (all arches), Cosign sign, SBOM (forever), SLSA.
+# FORENSIC_METADATA=true — suitable for evidentiary deployments.
+#
+# Docker Hub retention: last 12 compound tags.
+#
+# Zenodo :<version> deposit: NOT YET ACTIVE (see TODO.txt L3-08 C).
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    tags: ['v*.*.*']
+  schedule:
+    - cron: '0 5 * * 1'   # Weekly Monday 05:00 UTC — detect new SOLVE-IT releases
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Additional tag to apply'
+      force:
+        description: 'Force rebuild'
         required: false
-        type: string
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,41 +32,102 @@ concurrency:
 
 env:
   GHCR_REPO: ghcr.io/${{ github.repository }}
+  DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO }}
   PLATFORMS: linux/amd64,linux/arm64,linux/arm/v7
+  DOCKERHUB_VERSION_RETAIN: 12
 
 jobs:
   check:
-    name: Extract release metadata
+    name: Resolve versions and decide
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.meta.outputs.version }}
-      image_tag: ${{ steps.meta.outputs.image_tag }}
-      mcp_sha: ${{ steps.meta.outputs.mcp_sha }}
+      rebuild: ${{ steps.decide.outputs.rebuild }}
+      mcp_version: ${{ steps.decide.outputs.mcp_version }}
+      mcp_sha: ${{ steps.decide.outputs.mcp_sha }}
+      solveit_version: ${{ steps.solveit.outputs.solveit_version }}
+      solveit_sha: ${{ steps.solveit.outputs.solveit_sha }}
+      image_tag: ${{ steps.decide.outputs.image_tag }}
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           fetch-depth: 0
 
-      - name: Extract metadata
-        id: meta
+      - name: Resolve MCP version
+        id: mcp
         run: |
-          GIT_COMMIT=$(git rev-parse --short HEAD)
-          VERSION="dev"
-
+          MCP_SHA=$(git rev-parse --short HEAD)
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/}"
+            MCP_VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            MCP_VERSION=$(grep '^version' pyproject.toml | head -1 \
+              | sed 's/version = "\(.*\)"/\1/')
+          fi
+          echo "mcp_sha=${MCP_SHA}"       >> $GITHUB_OUTPUT
+          echo "mcp_version=${MCP_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Resolve latest SOLVE-IT release
+        id: solveit
+        run: |
+          # Query SOLVE-IT's own releases — not this repo's tags
+          SOLVEIT_VERSION=$(curl -sf \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/SOLVE-IT-DF/solve-it/releases/latest" \
+            | jq -r '.tag_name')
+
+          if [ -z "$SOLVEIT_VERSION" ] || [ "$SOLVEIT_VERSION" = "null" ]; then
+            echo "::error::Cannot determine latest SOLVE-IT release"
+            exit 1
           fi
 
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "image_tag=${VERSION}" >> $GITHUB_OUTPUT
-          echo "mcp_sha=${GIT_COMMIT}" >> $GITHUB_OUTPUT
+          # Resolve the tag to a SHA for reproducible checkout in Dockerfile
+          SOLVEIT_SHA=$(git ls-remote \
+            https://github.com/SOLVE-IT-DF/solve-it.git \
+            "refs/tags/${SOLVEIT_VERSION}" | cut -f1)
 
-          echo "::notice::Version: ${VERSION}"
-          echo "::notice::SHA: ${GIT_COMMIT}"
+          if [ -z "$SOLVEIT_SHA" ]; then
+            echo "::warning::Cannot resolve SHA for ${SOLVEIT_VERSION} — using tag name"
+          fi
+
+          # Strip leading 'v' for the si{} part of the compound tag
+          SOLVEIT_CLEAN=$(echo "$SOLVEIT_VERSION" | sed 's/^v//')
+
+          echo "solveit_version=${SOLVEIT_VERSION}" >> $GITHUB_OUTPUT
+          echo "solveit_sha=${SOLVEIT_SHA}"         >> $GITHUB_OUTPUT
+          echo "solveit_clean=${SOLVEIT_CLEAN}"     >> $GITHUB_OUTPUT
+          echo "::notice::SOLVE-IT release: ${SOLVEIT_VERSION} (${SOLVEIT_SHA:-tag})"
+
+      - name: Decide rebuild
+        id: decide
+        env:
+          MCP_VERSION: ${{ steps.mcp.outputs.mcp_version }}
+          MCP_SHA: ${{ steps.mcp.outputs.mcp_sha }}
+          SOLVEIT_CLEAN: ${{ steps.solveit.outputs.solveit_clean }}
+        run: |
+          IMAGE_TAG="${MCP_VERSION}-si${SOLVEIT_CLEAN}"
+
+          echo "mcp_version=${MCP_VERSION}" >> $GITHUB_OUTPUT
+          echo "mcp_sha=${MCP_SHA}"         >> $GITHUB_OUTPUT
+          echo "image_tag=${IMAGE_TAG}"     >> $GITHUB_OUTPUT
+
+          # Check if this exact compound tag is already in GHCR
+          EXISTS=$(docker manifest inspect ${{ env.GHCR_REPO }}:${IMAGE_TAG} 2>/dev/null \
+            && echo "true" || echo "false")
+
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "rebuild=true" >> $GITHUB_OUTPUT
+            echo "::notice::Force rebuild of ${IMAGE_TAG}"
+          elif [ "$EXISTS" = "false" ]; then
+            echo "rebuild=true" >> $GITHUB_OUTPUT
+            echo "::notice::${IMAGE_TAG} not found — building"
+          else
+            echo "rebuild=false" >> $GITHUB_OUTPUT
+            echo "::notice::${IMAGE_TAG} already exists — skipping"
+          fi
 
   build:
-    name: Build & Publish release
+    name: Build & Publish ${{ needs.check.outputs.image_tag }}
     needs: check
+    if: needs.check.outputs.rebuild == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -80,45 +150,86 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Login to Docker Hub
+        if: vars.DOCKERHUB_REPO != ''
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build and push
         id: build
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v5.1.0
         with:
           context: .
-          file: Dockerfile.release
+          file: Dockerfile
           platforms: ${{ env.PLATFORMS }}
           push: true
           tags: |
             ${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }}
             ${{ env.GHCR_REPO }}:latest
             ${{ env.GHCR_REPO }}:sha-${{ needs.check.outputs.mcp_sha }}
+            ${{ vars.DOCKERHUB_REPO != '' && format('{0}:{1}', env.DOCKERHUB_REPO, needs.check.outputs.image_tag) || '' }}
+            ${{ vars.DOCKERHUB_REPO != '' && format('{0}:latest', env.DOCKERHUB_REPO) || '' }}
           build-args: |
+            SOLVE_IT_MODE=release
+            FORENSIC_METADATA=true
+            SOLVE_IT_VERSION=${{ needs.check.outputs.solveit_version }}
+            SOLVEIT_SHA=${{ needs.check.outputs.solveit_sha }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
             VCS_REF=${{ needs.check.outputs.mcp_sha }}
-            VERSION=${{ needs.check.outputs.version }}
-            SOLVE_IT_VERSION=${{ github.ref_name }}
+            VERSION=${{ needs.check.outputs.image_tag }}
+            MCP_VERSION=${{ needs.check.outputs.mcp_version }}
           labels: |
             org.opencontainers.image.revision=${{ needs.check.outputs.mcp_sha }}
-            org.opencontainers.image.version=${{ needs.check.outputs.version }}
+            org.opencontainers.image.version=${{ needs.check.outputs.image_tag }}
           cache-from: type=gha,scope=release
           cache-to: type=gha,mode=max,scope=release
           provenance: true
           sbom: true
 
-      - name: Summary
+      - name: Prune old Docker Hub compound tags (keep last 12)
+        if: vars.DOCKERHUB_REPO != '' && secrets.DOCKERHUB_TOKEN != ''
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO }}
+          RETAIN: ${{ env.DOCKERHUB_VERSION_RETAIN }}
         run: |
-          echo "## Release published" >> $GITHUB_STEP_SUMMARY
-          echo "| | |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | \`${{ needs.check.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tag | \`${{ needs.check.outputs.image_tag }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| SHA | \`${{ needs.check.outputs.mcp_sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Digest | \`${{ steps.build.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| GHCR | \`${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          TOKEN=$(curl -sf -X POST \
+            "https://hub.docker.com/v2/users/login" \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"${{ secrets.DOCKERHUB_USERNAME }}\",\"password\":\"${DOCKERHUB_TOKEN}\"}" \
+            | jq -r '.token')
+
+          OWNER=$(echo "$DOCKERHUB_REPO" | cut -d/ -f1)
+          REPO=$(echo "$DOCKERHUB_REPO" | cut -d/ -f2)
+
+          # Compound tags match v*-si* pattern
+          TAGS=$(curl -sf \
+            "https://hub.docker.com/v2/repositories/${OWNER}/${REPO}/tags/?page_size=100" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            | jq -r '.results[].name' \
+            | grep -E '^v.+-si.+$' \
+            | sort)
+
+          COUNT=$(echo "$TAGS" | grep -c . || true)
+          TO_DELETE=$(( COUNT - RETAIN ))
+
+          if [ "$TO_DELETE" -gt 0 ]; then
+            echo "$TAGS" | head -n "$TO_DELETE" | while read -r TAG; do
+              echo "Deleting: ${TAG}"
+              curl -sf -X DELETE \
+                "https://hub.docker.com/v2/repositories/${OWNER}/${REPO}/tags/${TAG}/" \
+                -H "Authorization: Bearer ${TOKEN}"
+            done
+          else
+            echo "::notice::${COUNT} compound tags — no pruning needed"
+          fi
 
   trivy-scan:
     name: Trivy scan (${{ matrix.platform }})
     needs: [check, build]
+    if: needs.check.outputs.rebuild == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -131,132 +242,112 @@ jobs:
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
       - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - name: Login to GHCR
         uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pull and export image for platform
+      - name: Pull and export
         run: |
-          PLATFORM_TAG=$(echo "${{ matrix.platform }}" | tr '/' '-' | sed 's/linux-//')
+          PTAG=$(echo "${{ matrix.platform }}" | tr '/' '-' | sed 's/linux-//')
           docker pull --platform ${{ matrix.platform }} \
             ${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }}
           docker save ${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }} \
-            -o /tmp/image-${PLATFORM_TAG}.tar
-          echo "PLATFORM_TAG=${PLATFORM_TAG}" >> $GITHUB_ENV
+            -o /tmp/image-${PTAG}.tar
+          echo "PTAG=${PTAG}" >> $GITHUB_ENV
       - name: Trivy scan
         uses: aquasecurity/trivy-action@master
         with:
-          input: /tmp/image-${{ env.PLATFORM_TAG }}.tar
+          input: /tmp/image-${{ env.PTAG }}.tar
           format: sarif
-          output: trivy-release-${{ env.PLATFORM_TAG }}.sarif
+          output: trivy-release-${{ env.PTAG }}.sarif
           severity: CRITICAL,HIGH
           scanners: vuln
         continue-on-error: true
       - uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
         if: always()
         with:
-          sarif_file: trivy-release-${{ env.PLATFORM_TAG }}.sarif
-          category: trivy-release-${{ env.PLATFORM_TAG }}
+          sarif_file: trivy-release-${{ env.PTAG }}.sarif
+          category: trivy-release-${{ env.PTAG }}
         continue-on-error: true
       - name: Fail on CRITICAL
         run: |
-          COUNT=$(trivy image --input /tmp/image-${{ env.PLATFORM_TAG }}.tar \
+          COUNT=$(trivy image --input /tmp/image-${{ env.PTAG }}.tar \
             --format json --severity CRITICAL --scanners vuln --quiet \
             | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length')
-          if [ "$COUNT" -gt 0 ]; then
-            echo "::error::$COUNT CRITICAL CVEs on ${{ matrix.platform }}"
-            exit 1
-          fi
+          [ "$COUNT" -gt 0 ] && echo "::error::${COUNT} CRITICAL CVEs on ${{ matrix.platform }}" && exit 1
           echo "::notice::No CRITICAL CVEs on ${{ matrix.platform }}"
 
   sign:
     name: Sign & Attest
     needs: [check, build, trivy-scan]
+    if: needs.check.outputs.rebuild == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write
-
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
-
-      - name: Install Syft (SBOM generator)
-        uses: anchore/sbom-action/download-syft@ab9d16d4b419c9d1a02df5213fa0ebe965ca5a57 # v0.15.9
-
+      - uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+      - uses: anchore/sbom-action/download-syft@ab9d16d4b419c9d1a02df5213fa0ebe965ca5a57 # v0.15.9
       - name: Login to GHCR
         uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Sign image with Cosign (keyless, Rekor transparency log)
+      - name: Sign with Cosign
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
-          IMAGE_REF="${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }}@${{ needs.build.outputs.digest }}"
-          echo "Signing: ${IMAGE_REF}"
-          cosign sign --yes "${IMAGE_REF}"
-          echo "::notice::Image signed — entry recorded in Rekor transparency log"
-
-      - name: Generate SBOM with Syft (SPDX + CycloneDX)
+          cosign sign --yes \
+            "${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }}@${{ needs.build.outputs.digest }}"
+      - name: Generate SBOM
         run: |
           syft "${{ env.GHCR_REPO }}@${{ needs.build.outputs.digest }}" \
-            -o spdx-json=sbom-spdx.json \
-            -o cyclonedx-json=sbom-cyclonedx.json \
-            -o syft-json=sbom-syft.json
-          echo "::notice::SBOM generated in SPDX, CycloneDX, and Syft formats"
-
-      - name: Attach SBOM to GHCR image via Cosign
+            -o spdx-json=sbom-spdx.json -o cyclonedx-json=sbom-cyclonedx.json
+      - name: Attach SBOM
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
-          IMAGE_REF="${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }}@${{ needs.build.outputs.digest }}"
           cosign attest --yes \
-            --predicate sbom-spdx.json \
-            --type spdx \
-            "${IMAGE_REF}"
-          echo "::notice::SBOM attached to GHCR image"
-
-      - name: Upload SBOM as workflow artifact (retained forever for releases)
+            --predicate sbom-spdx.json --type spdx \
+            "${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }}@${{ needs.build.outputs.digest }}"
+      - name: Upload SBOM artifact (retained forever — forensic evidence)
         uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
         with:
-          name: sbom-release-${{ needs.check.outputs.version }}-${{ github.run_id }}
-          path: |
-            sbom-spdx.json
-            sbom-cyclonedx.json
-            sbom-syft.json
-          retention-days: 0  # Forever — forensic evidence may be needed years later
-
-      - name: SLSA provenance attestation
-        uses: actions/attest-build-provenance@v2
+          name: sbom-${{ needs.check.outputs.image_tag }}-${{ github.run_id }}
+          path: sbom-*.json
+          retention-days: 0
+      - uses: actions/attest-build-provenance@v2
         with:
           subject-name: ${{ env.GHCR_REPO }}
           subject-digest: ${{ needs.build.outputs.digest }}
           push-to-registry: true
-
       - name: Summary
         run: |
-          echo "## Supply Chain Integrity" >> $GITHUB_STEP_SUMMARY
-          echo "| Artifact | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Cosign signature (Rekor) | Signed |" >> $GITHUB_STEP_SUMMARY
-          echo "| SBOM (SPDX + CycloneDX) | Generated & attached |" >> $GITHUB_STEP_SUMMARY
-          echo "| SLSA provenance | Attested |" >> $GITHUB_STEP_SUMMARY
+          echo "## ${{ needs.check.outputs.image_tag }} published" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Image tag | \`${{ needs.check.outputs.image_tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| MCP version | \`${{ needs.check.outputs.mcp_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| SOLVE-IT release | \`${{ needs.check.outputs.solveit_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| SOLVE-IT SHA | \`${{ needs.check.outputs.solveit_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Digest | \`${{ needs.build.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** \`${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Digest:** \`${{ needs.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Verify signature:" >> $GITHUB_STEP_SUMMARY
+          echo "Verify:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "cosign verify ${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }} \\" >> $GITHUB_STEP_SUMMARY
           echo "  --certificate-identity-regexp='https://github.com/${{ github.repository }}.*' \\" >> $GITHUB_STEP_SUMMARY
           echo "  --certificate-oidc-issuer='https://token.actions.githubusercontent.com'" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  # ── Zenodo :<version> deposit ──────────────────────────────────────────────
+  # NOT YET ACTIVE (see TODO.txt L3-08 C):
+  #   Attach SOLVE-IT data ZIP to GitHub Release and Zenodo versioned deposit.
+  # zenodo-release:
+  #   needs: [check, build, trivy-scan, sign]
+  #   if: false
+  #   steps: ...
