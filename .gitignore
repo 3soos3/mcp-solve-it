@@ -1,3 +1,7 @@
+# Local dev reports and notes
+TODO*.md
+TODO*.txt
+
 # Python bytecode
 __pycache__/
 *.pyc
