@@ -1,0 +1,109 @@
+name: Docker - Build & Publish :live
+
+# Builds and publishes the :live image on push to main and weekly.
+# Data is NOT baked in — the entrypoint fetches at container startup.
+# Published to GHCR and Docker Hub as :live (always overwritten, no history).
+# Not FSS-compliant (FORENSIC_METADATA=false).
+# Security: Trivy CVE scan only — no Cosign signing (non-evidentiary).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - 'src/**'
+      - 'pyproject.toml'
+  schedule:
+    - cron: '0 4 * * 1'   # Weekly Monday 04:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true   # OK to cancel — :live is always overwritten
+
+env:
+  GHCR_REPO: ghcr.io/${{ github.repository }}
+  DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO }}
+  PLATFORMS: linux/amd64,linux/arm64,linux/arm/v7
+
+jobs:
+  build:
+    name: Build & Publish :live
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        if: vars.DOCKERHUB_REPO != ''
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push :live
+        id: build
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v5.1.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          tags: |
+            ${{ env.GHCR_REPO }}:live
+            ${{ vars.DOCKERHUB_REPO != '' && format('{0}:live', env.DOCKERHUB_REPO) || '' }}
+          build-args: |
+            SOLVE_IT_MODE=live
+            FORENSIC_METADATA=false
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+            VCS_REF=${{ github.sha }}
+            VERSION=live
+          cache-from: type=gha,scope=live
+          cache-to: type=gha,mode=max,scope=live
+
+  trivy-scan:
+    name: Trivy scan :live
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - name: Login to GHCR
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.GHCR_REPO }}:live
+          format: sarif
+          output: trivy-live.sarif
+          severity: CRITICAL,HIGH
+          scanners: vuln
+        continue-on-error: true
+      - uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
+        if: always()
+        with:
+          sarif_file: trivy-live.sarif
+          category: trivy-live
+        continue-on-error: true
