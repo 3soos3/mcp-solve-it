@@ -8,8 +8,8 @@ Dockerfile.dev       export-ignore
 Dockerfile.test      export-ignore
 requirements-dev.txt export-ignore
 
-# Tests — excluded from Zenodo source; run from the repo directly
-tests/               export-ignore
+# Stress tests — not correctness tests, excluded from Zenodo source
+tests/stress/        export-ignore
 
 # Docs site source — the rendered site is separate; README is enough
 docs/                export-ignore
@@ -18,6 +18,3 @@ mkdocs.yml           export-ignore
 # Reports and local notes
 TODO_report.md       export-ignore
 CHANGELOG.md         export-ignore
-
-# Stress tests
-tests/stress/        export-ignore
