@@ -17,7 +17,7 @@ on:
   push:
     tags: ['v*.*.*']
   schedule:
-    - cron: '0 5 * * *'   # Daily 05:00 UTC — detect new SOLVE-IT releases
+    - cron: '0 4 * * *'   # Daily 04:00 UTC — detect new SOLVE-IT releases
   workflow_dispatch:
     inputs:
       force:
