@@ -311,8 +311,9 @@ class HTTPTransport(TransportBase):
                 from mcp_chassis.utils.fss_context import fss_auth_token
 
                 auth_header = headers_dict.get("authorization", "")
-                if auth_header.lower().startswith("bearer "):
-                    fss_auth_token.set(auth_header[7:].strip())
+                if auth_header:
+                    token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else auth_header.strip()
+                    fss_auth_token.set(token)
 
                 if investigation_id or analyst_identity or agent_identity:
                     logger.debug(
@@ -340,8 +341,9 @@ class HTTPTransport(TransportBase):
                 from mcp_chassis.utils.fss_context import fss_auth_token
 
                 auth = request.headers.get("authorization", "")
-                if auth.lower().startswith("bearer "):
-                    fss_auth_token.set(auth[7:].strip())
+                if auth:
+                    token = auth[7:].strip() if auth.lower().startswith("bearer ") else auth.strip()
+                    fss_auth_token.set(token)
                 return await call_next(request)  # type: ignore[call-arg]
 
         middleware = [

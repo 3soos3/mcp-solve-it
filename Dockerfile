@@ -48,8 +48,6 @@ RUN git clone --depth=1 https://github.com/SOLVE-IT-DF/solve-it.git /tmp/solve-i
         git -C /tmp/solve-it-main fetch --depth=1 origin "refs/tags/$SOLVE_IT_VERSION" && \
         git -C /tmp/solve-it-main checkout "$SOLVE_IT_VERSION"; \
       fi; \
-    else \
-      rm -rf /tmp/solve-it-main/data /tmp/solve-it-main/extension_data; \
     fi && \
     rm -rf /tmp/solve-it-main/.git
 
