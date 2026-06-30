@@ -67,7 +67,7 @@ jobs:
           MCP_SHA=$(git rev-parse --short HEAD)
           MCP_VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           MONTH_TAG=$(date -u '+%Y-%m')
-          SOLVE_IT_VERSION="main-$(date -u '+%Y%m')"
+          SOLVE_IT_VERSION=$(date -u '+%Y%m')
 
           echo "mcp_sha=${MCP_SHA}"                 >> $GITHUB_OUTPUT
           echo "mcp_version=${MCP_VERSION}"         >> $GITHUB_OUTPUT
@@ -251,6 +251,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
