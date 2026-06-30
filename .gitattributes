@@ -1,0 +1,23 @@
+# Controls what git archive (and Zenodo source deposits) include.
+# Files/dirs marked export-ignore are excluded from `git archive` output.
+
+# Dev and CI infrastructure — not needed to run or understand the code
+.github/             export-ignore
+.pre-commit-config.yaml export-ignore
+Dockerfile.dev       export-ignore
+Dockerfile.test      export-ignore
+requirements-dev.txt export-ignore
+
+# Tests — excluded from Zenodo source; run from the repo directly
+tests/               export-ignore
+
+# Docs site source — the rendered site is separate; README is enough
+docs/                export-ignore
+mkdocs.yml           export-ignore
+
+# Reports and local notes
+TODO_report.md       export-ignore
+CHANGELOG.md         export-ignore
+
+# Stress tests
+tests/stress/        export-ignore

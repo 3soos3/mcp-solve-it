@@ -394,6 +394,14 @@ jobs:
           }
           EOF
 
+      - name: Create stripped source ZIP
+        env:
+          TAG: ${{ needs.check.outputs.image_tag }}
+        run: |
+          # git archive respects .gitattributes export-ignore — strips tests/,
+          # docs/, .github/, dev Dockerfiles, etc. automatically.
+          git archive HEAD --format=zip -o "source-${TAG}.zip"
+
       - name: Download SBOMs from sign job
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -441,7 +449,7 @@ jobs:
             -H "Authorization: Bearer ${ZENODO_TOKEN}" | jq -r '.links.bucket')
 
           # Upload files
-          for file in manifest.json sbom-spdx.json sbom-cyclonedx.json "solve-it-data-${TAG}.zip"; do
+          for file in manifest.json "source-${TAG}.zip" sbom-spdx.json sbom-cyclonedx.json "solve-it-data-${TAG}.zip"; do
             [ -f "$file" ] || { echo "::warning::Skipping missing file: ${file}"; continue; }
             echo "Uploading ${file} ..."
             curl -sf -X PUT "${BUCKET}/${file}" \
