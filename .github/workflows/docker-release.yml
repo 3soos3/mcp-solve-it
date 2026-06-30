@@ -5,7 +5,7 @@ name: Docker - Build & Publish :release
 #   1. Git tag push (v*.*.*) — new MCP release, pair with latest SOLVE-IT release
 #   2. Daily schedule — detect new SOLVE-IT releases, rebuild with current MCP
 #
-# Tags: v{mcp}-si{solveit}, :release on GHCR + Docker Hub.  :latest also updated.
+# Tags: v{mcp}-si{solveit} on GHCR + Docker Hub.  :latest also updated.
 # Post-publish: Trivy scan (all arches), Cosign sign, SBOM (forever), SLSA.
 # FORENSIC_METADATA=true — suitable for evidentiary deployments.
 #
@@ -174,11 +174,9 @@ jobs:
           push: true
           tags: |
             ${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }}
-            ${{ env.GHCR_REPO }}:release
             ${{ env.GHCR_REPO }}:latest
             ${{ env.GHCR_REPO }}:sha-${{ needs.check.outputs.mcp_sha }}
             ${{ vars.DOCKERHUB_REPO != '' && format('{0}:{1}', env.DOCKERHUB_REPO, needs.check.outputs.image_tag) || '' }}
-            ${{ vars.DOCKERHUB_REPO != '' && format('{0}:release', env.DOCKERHUB_REPO) || '' }}
             ${{ vars.DOCKERHUB_REPO != '' && format('{0}:latest', env.DOCKERHUB_REPO) || '' }}
           build-args: |
             SOLVE_IT_MODE=release
