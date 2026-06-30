@@ -732,6 +732,12 @@ def _register_search_tool(server: ChassisServer, kb: Any) -> None:
             substring_match=substring_match,
             search_logic=search_logic,
         )
+        try:
+            from mcp_chassis.utils.metrics import get_metrics
+
+            get_metrics().record_search_results(len(result) if isinstance(result, list) else 0)
+        except Exception:
+            pass
         return json.dumps(result)
 
     server.register_tool(

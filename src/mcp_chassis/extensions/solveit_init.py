@@ -203,11 +203,43 @@ def on_init(server: ChassisServer) -> None:
             config.enable_extensions,
             kb_version,
         )
+        try:
+            from mcp_chassis.utils.metrics import get_metrics
+
+            get_metrics().register_kb_gauges(
+                loaded=True,
+                techniques=n_t,
+                weaknesses=n_w,
+                mitigations=n_m,
+            )
+        except Exception:
+            pass
+
+        try:
+            from mcp_chassis.utils.telemetry import get_telemetry
+
+            tm = get_telemetry()
+            if tm.enabled:
+                # Patch kb.version_id into the resource so it appears on all spans
+                os.environ.setdefault(
+                    "OTEL_RESOURCE_ATTRIBUTES",
+                    f"mcp.kb.version_id={server._kb_version_id or 'unknown'}",
+                )
+        except Exception:
+            pass
+
     except Exception as exc:
         msg = f"Failed to load SOLVE-IT KB from '{data_path}': {exc}"
         logger.error(msg)
         server._kb = None
         server._kb_error = msg
+
+        try:
+            from mcp_chassis.utils.metrics import get_metrics
+
+            get_metrics().register_kb_gauges(loaded=False)
+        except Exception:
+            pass
 
         if config.init_required:
             # sys.exit() raises SystemExit (a BaseException), which bypasses

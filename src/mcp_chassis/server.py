@@ -470,28 +470,43 @@ class ChassisServer:
         Returns:
             CallToolResult with tool output (including _provenance) or FSS error.
         """
-        # Record OTel metric for the full dispatch (including error paths)
-        _metrics_start: float | None = None
-        try:
-            from mcp_chassis.utils.metrics import get_metrics
+        from mcp_chassis.utils.metrics import get_metrics
+        from mcp_chassis.utils.telemetry import get_telemetry
 
-            _metrics_start = get_metrics().record_call_start(tool_name)
-        except Exception:
-            pass
+        _metrics_start = get_metrics().record_call_start(tool_name)
+        _span = get_telemetry().start_span(
+            "mcp.tool.call",
+            **{"tool.name": tool_name},
+        )
 
-        result = await self._dispatch_tool_inner(tool_name, arguments)
+        with _span:
+            result = await self._dispatch_tool_inner(tool_name, arguments)
 
-        try:
-            if _metrics_start is not None:
-                from mcp_chassis.utils.metrics import get_metrics
+            # Extract FSS error code from the response payload when present
+            _fss_code = ""
+            try:
+                if result.isError and result.content:
+                    _payload = json.loads(result.content[0].text)
+                    _fss_code = _payload.get("error_code", "FSS_UNKNOWN")
+            except Exception:
+                if result.isError:
+                    _fss_code = "FSS_UNKNOWN"
 
-                get_metrics().record_call_end(
-                    tool_name,
-                    _metrics_start,
-                    error_code="" if not result.isError else "error",
+            try:
+                _span.set_attribute("fss.error_code", _fss_code or "none")
+                _span.set_attribute(
+                    "fss.transaction_id",
+                    str(fss_transaction_id.get() or ""),
                 )
-        except Exception:
-            pass
+                _span.set_attribute("kb.version", str(getattr(self, "_kb_version", "") or ""))
+            except Exception:
+                pass
+
+            get_metrics().record_call_end(
+                tool_name,
+                _metrics_start,
+                fss_error_code=_fss_code,
+            )
 
         return result
 
@@ -558,6 +573,13 @@ class ChassisServer:
 
         # ── 3. Compute parameters_cai (FSS-0005 §3.2) ─────────────────
         try:
+            from mcp_chassis.utils.metrics import get_metrics as _gm
+
+            _gm().record_request_size(tool_name, len(json.dumps(arguments).encode()))
+        except Exception:
+            pass
+
+        try:
             params_cai = compute_json_cai(arguments)
             fss_parameters_cai.set(params_cai)
         except Exception as exc:
@@ -586,14 +608,32 @@ class ChassisServer:
                 middleware_result.error_code,
                 transaction_id,
             )
-            # Map chassis error codes to FSS taxonomy
+            # Map chassis error codes to FSS taxonomy and record OTel block
             code = middleware_result.error_code
             if "AUTH" in code:
                 fss_code = "FSS_AUTH_REQUIRED"
+                _block_stage = "auth"
             elif "RATE_LIMIT" in code:
                 fss_code = FSS_EXECUTION_INTERRUPTED
+                _block_stage = "rate_limit"
+            elif "REPLAY" in code:
+                fss_code = FSS_PARAM_INVALID
+                _block_stage = "replay"
+            elif "IO_LIMIT" in code or "SIZE" in code:
+                fss_code = FSS_PARAM_INVALID
+                _block_stage = "io_limit"
+            elif "SANIT" in code:
+                fss_code = FSS_PARAM_INVALID
+                _block_stage = "sanitization"
             else:
                 fss_code = FSS_PARAM_INVALID
+                _block_stage = "validation"
+            try:
+                from mcp_chassis.utils.metrics import get_metrics as _gm
+
+                _gm().record_middleware_block(tool_name, _block_stage)
+            except Exception:
+                pass
             msg = (
                 middleware_result.error_message
                 if self._config.security.detailed_errors
@@ -647,6 +687,15 @@ class ChassisServer:
                 response_text = json.dumps({"result": result_obj, "_provenance": provenance})
 
             self._middleware.check_response_size(response_text)
+
+            try:
+                from mcp_chassis.utils.metrics import get_metrics as _gm
+
+                _gm().record_response_size(tool_name, len(response_text.encode()))
+                _evidentiary = provenance.get("evidentiary_status") == "evidentiary"
+                _gm().record_evidentiary(tool_name, evidentiary=_evidentiary)
+            except Exception:
+                pass
 
         except ChassisError as exc:
             logger.error("Response check failed for '%s': %s", tool_name, exc)

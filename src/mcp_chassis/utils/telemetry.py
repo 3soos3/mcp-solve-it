@@ -59,6 +59,9 @@ class TelemetryManager:
                     "service.name": service_name,
                     "service.version": os.environ.get("SOLVE_IT_VERSION", "unknown"),
                     "deployment.environment": environment,
+                    "solve_it.mode": os.environ.get("SOLVE_IT_MODE", "unknown"),
+                    "solve_it.version": os.environ.get("SOLVE_IT_VERSION", "unknown"),
+                    "forensic_metadata": os.environ.get("FORENSIC_METADATA", "false"),
                 }
             )
 

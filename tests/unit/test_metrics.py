@@ -40,7 +40,7 @@ class TestMCPMetricsWithoutOTel:
 
         m = get_metrics()
         start = m.record_call_start("solveit_get_technique")
-        m.record_call_end("solveit_get_technique", start, error_code="FSS_PARAM_INVALID")
+        m.record_call_end("solveit_get_technique", start, fss_error_code="FSS_PARAM_INVALID")
 
     def test_record_call_start_returns_monotonic_time(self) -> None:
         from mcp_chassis.utils.metrics import get_metrics
@@ -186,12 +186,12 @@ class TestMCPMetricsWithOTel:
 
             m = MCPMetrics()
             start = m.record_call_start("solveit_get_technique")
-            m.record_call_end("solveit_get_technique", start, error_code="FSS_PARAM_INVALID")
+            m.record_call_end("solveit_get_technique", start, fss_error_code="FSS_PARAM_INVALID")
 
         mock_err_counter.add.assert_called_once()
         call_args = mock_err_counter.add.call_args
         assert call_args[0][0] == 1
-        assert call_args[0][1].get("error.code") == "FSS_PARAM_INVALID"
+        assert call_args[0][1].get("fss.error_code") == "FSS_PARAM_INVALID"
 
     def test_no_error_counter_call_without_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import MagicMock, patch

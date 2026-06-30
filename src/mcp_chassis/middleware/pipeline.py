@@ -140,6 +140,12 @@ class MiddlewarePipeline:
                 raise AuthError(f"Authorization failed: lacks required scopes for '{name}'")
         except AuthError as exc:
             logger.warning("Auth check failed for '%s'", name)
+            try:
+                from mcp_chassis.utils.metrics import get_metrics
+
+                get_metrics().record_auth_failure(self._auth_provider.__class__.__name__)
+            except Exception:
+                pass
             return MiddlewareResult.error(exc)
         return None
 
@@ -200,6 +206,12 @@ class MiddlewarePipeline:
                 "replay_rejected",
                 error_detail=str(exc.args[0]) if exc.args else str(exc),
             )
+            try:
+                from mcp_chassis.utils.metrics import get_metrics
+
+                get_metrics().record_replay_rejection()
+            except Exception:
+                pass
             return MiddlewareResult.error(exc)
         except (ValueError, TypeError) as exc:
             logger.warning("Invalid X-Request-Timestamp '%s': %s", timestamp_str, exc)
