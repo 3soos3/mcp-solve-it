@@ -135,6 +135,8 @@ jobs:
       id-token: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}
+      base_ref: ${{ steps.base.outputs.ref }}
+      base_digest: ${{ steps.base.outputs.digest }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -189,6 +191,15 @@ jobs:
           cache-to: type=gha,mode=max,scope=release
           provenance: true
           sbom: true
+
+      - name: Capture base image digest
+        id: base
+        run: |
+          BASE=$(grep '^FROM' Dockerfile | head -1 | awk '{print $2}')
+          DIGEST=$(docker buildx imagetools inspect "$BASE" \
+            --format '{{index .Manifest "digest"}}' 2>/dev/null || echo "")
+          echo "ref=${BASE}"     >> $GITHUB_OUTPUT
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
 
       - name: Prune old Docker Hub compound tags (keep last 12)
         if: vars.DOCKERHUB_REPO != ''
@@ -378,7 +389,16 @@ jobs:
           TAG: ${{ needs.check.outputs.image_tag }}
           DIGEST: ${{ needs.build.outputs.digest }}
         run: |
-          zip -qr "solve-it-data-${TAG}.zip" /tmp/solve-it/data /tmp/solve-it/extension_data
+          # Include data, extension_data, solve_it_library (needed to read the data),
+          # and SOLVE-IT attribution files. Exclude __pycache__ and compiled bytecode.
+          zip -qr "solve-it-data-${TAG}.zip" \
+            /tmp/solve-it/data \
+            /tmp/solve-it/extension_data \
+            /tmp/solve-it/solve_it_library \
+            /tmp/solve-it/LICENSE \
+            /tmp/solve-it/README.md \
+            /tmp/solve-it/requirements.txt \
+            -x "*/__pycache__/*" -x "*.pyc" -x "*.pyo"
 
           cat > manifest.json << EOF
           {
@@ -390,7 +410,9 @@ jobs:
             "solveit_version": "${{ needs.check.outputs.solveit_version }}",
             "solveit_sha":     "${{ needs.check.outputs.solveit_sha }}",
             "build_date":      "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "forensic_metadata": true
+            "forensic_metadata": true,
+            "base_image_ref":    "${{ needs.build.outputs.base_ref }}",
+            "base_image_digest": "${{ needs.build.outputs.base_digest }}"
           }
           EOF
 
