@@ -52,11 +52,11 @@ LIVE = ImageConfig(
     image="solve-it-mcp:live",
     mode="live",
     forensic=False,
-    has_bundled_kb=False,
+    has_bundled_kb=True,
     expected_version=None,
     exact_counts=None,
     min_counts={"techniques": 100, "weaknesses": 100, "mitigations": 100},
-    default_volumes=(SOLVEIT_VOL,),
+    default_volumes=(),
     default_extra_env=(FAST_FAIL,),
 )
 
