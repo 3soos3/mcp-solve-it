@@ -108,7 +108,7 @@ COPY --from=builder --chown=mcpuser:mcpuser /tmp/solve-it-main /app/solve-it-mai
 
 USER mcpuser
 
-ENV PYTHONPATH=/app/src \
+ENV PYTHONPATH=/app/src:/app/solve-it-main \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     MCP_CHASSIS_CONFIG=/app/config/default.toml \
