@@ -175,7 +175,7 @@ jsonschema-specifications
 MIT
 
 librt
-0.11.0
+0.12.0
 MIT
 
 license-expression
@@ -195,7 +195,7 @@ mcp
 MIT License
 
 mcp-chassis
-1.0.0
+1.1.0
 UNKNOWN
 
 mdurl
