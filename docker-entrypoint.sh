@@ -41,13 +41,8 @@ if [ "$SOLVE_IT_MODE" = "live" ]; then
         echo "[entrypoint] Download failed — will use fallback." >&2
     fi
 
-    # If the downloaded data dir lacks solve_it_library, symlink from bundled.
-    if [ -d "${DATA_DIR}/data" ] && [ ! -d "${DATA_DIR}/solve_it_library" ] \
-       && [ -d "${BUNDLED_DIR}/solve_it_library" ]; then
-        ln -sf "${BUNDLED_DIR}/solve_it_library" "${DATA_DIR}/solve_it_library"
-    fi
-
     # Use downloaded/cached data if available; fall back to bundled.
+    # solve_it_library is always importable via PYTHONPATH=/app/solve-it-main.
     if [ -d "${DATA_DIR}/data" ]; then
         export MCP_APP_SOLVEIT_DATA_PATH="${DATA_DIR}"
         echo "[entrypoint] Using live data at ${DATA_DIR}."
