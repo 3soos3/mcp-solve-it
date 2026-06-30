@@ -312,7 +312,8 @@ class HTTPTransport(TransportBase):
 
                 auth_header = headers_dict.get("authorization", "")
                 if auth_header:
-                    token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else auth_header.strip()
+                    has_bearer = auth_header.lower().startswith("bearer ")
+                    token = auth_header[7:].strip() if has_bearer else auth_header.strip()
                     fss_auth_token.set(token)
 
                 if investigation_id or analyst_identity or agent_identity:
@@ -342,7 +343,8 @@ class HTTPTransport(TransportBase):
 
                 auth = request.headers.get("authorization", "")
                 if auth:
-                    token = auth[7:].strip() if auth.lower().startswith("bearer ") else auth.strip()
+                    has_bearer = auth.lower().startswith("bearer ")
+                    token = auth[7:].strip() if has_bearer else auth.strip()
                     fss_auth_token.set(token)
                 return await call_next(request)  # type: ignore[call-arg]
 
