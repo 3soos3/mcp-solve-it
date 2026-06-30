@@ -512,16 +512,13 @@ jobs:
                 ]
               }}')"
 
-          # Publish and capture DOI
-          DOI=$(curl -sf -X POST \
-            "${ZENODO_BASE}/deposit/depositions/${DRAFT_ID}/actions/publish" \
-            -H "Authorization: Bearer ${ZENODO_TOKEN}" | jq -r '.doi')
+          DRAFT_URL="${ZENODO_BASE}/deposit/depositions/${DRAFT_ID}"
 
-          echo "doi=${DOI}" >> $GITHUB_OUTPUT
-          echo "## Zenodo Deposit" >> $GITHUB_STEP_SUMMARY
+          echo "draft_id=${DRAFT_ID}" >> $GITHUB_OUTPUT
+          echo "## Zenodo Deposit (draft — publish manually)" >> $GITHUB_STEP_SUMMARY
           echo "| | |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| DOI | https://doi.org/${DOI} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Draft ID | \`${DRAFT_ID}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Release | \`${TAG}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Digest | \`${DIGEST}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "::notice::Zenodo DOI: https://doi.org/${DOI}"
+          echo "::notice::Zenodo draft ready — publish manually at ${DRAFT_URL}"
