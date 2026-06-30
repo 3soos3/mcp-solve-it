@@ -228,6 +228,18 @@ class TestApiKeyProvider:
         assert result.identity.id == "analyst-1"
 
     @pytest.mark.asyncio
+    async def test_bare_token_authenticates(self, tmp_path: object) -> None:
+        from mcp_chassis.security.auth import ApiKeyProvider
+
+        raw_key = "a" * 32
+        path = self._make_key_store(tmp_path, {raw_key: "analyst-1"})
+        provider = ApiKeyProvider(keys_path=path)
+        result = await provider.authenticate({"authorization_header": raw_key})
+        assert result.authenticated
+        assert result.identity is not None
+        assert result.identity.id == "analyst-1"
+
+    @pytest.mark.asyncio
     async def test_wrong_key_fails(self, tmp_path: object) -> None:
         from mcp_chassis.security.auth import ApiKeyProvider
 
@@ -310,8 +322,9 @@ class TestOAuthJWTProvider:
         from mcp_chassis.security.auth import OAuthJWTProvider
 
         provider = OAuthJWTProvider(jwks_url="https://example.com/jwks", audience="", issuer="")
-        result = await provider.authenticate({"authorization_header": "Basic abc"})
+        result = await provider.authenticate({"authorization_header": ""})
         assert not result.authenticated
+        assert "no Bearer token" in result.reason
 
     @pytest.mark.asyncio
     async def test_authorize_grants_wildcard(self) -> None:
