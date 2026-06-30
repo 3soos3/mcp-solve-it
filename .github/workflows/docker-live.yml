@@ -1,6 +1,6 @@
 name: Docker - Build & Publish :live
 
-# Builds and publishes the :live image on push to main and weekly.
+# Builds and publishes the :live image on push to main.
 # Data is NOT baked in — the entrypoint fetches at container startup.
 # Published to GHCR and Docker Hub as :live (always overwritten, no history).
 # Not FSS-compliant (FORENSIC_METADATA=false).
@@ -14,8 +14,6 @@ on:
       - 'docker-entrypoint.sh'
       - 'src/**'
       - 'pyproject.toml'
-  schedule:
-    - cron: '0 4 * * 1'   # Weekly Monday 04:00 UTC
   workflow_dispatch:
 
 concurrency:

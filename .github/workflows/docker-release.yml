@@ -1,23 +1,23 @@
-name: Docker - Build & Publish :<version>
+name: Docker - Build & Publish :release
 
-# Builds versioned release images with compound tag v{mcp}-si{solveit}.
+# Builds signed release images with compound tag v{mcp}-si{solveit}.
 # Two triggers:
 #   1. Git tag push (v*.*.*) — new MCP release, pair with latest SOLVE-IT release
-#   2. Weekly schedule — detect new SOLVE-IT releases, rebuild with current MCP
+#   2. Daily schedule — detect new SOLVE-IT releases, rebuild with current MCP
 #
-# Tags: v{mcp}-si{solveit} on GHCR + Docker Hub.  :latest also updated.
+# Tags: v{mcp}-si{solveit}, :release on GHCR + Docker Hub.  :latest also updated.
 # Post-publish: Trivy scan (all arches), Cosign sign, SBOM (forever), SLSA.
 # FORENSIC_METADATA=true — suitable for evidentiary deployments.
 #
 # Docker Hub retention: last 12 compound tags.
 #
-# Zenodo :<version> deposit: NOT YET ACTIVE (see TODO.txt L3-08 C).
+# Zenodo :release deposit: NOT YET ACTIVE (see TODO.txt L3-08 C).
 
 on:
   push:
     tags: ['v*.*.*']
   schedule:
-    - cron: '0 5 * * 1'   # Weekly Monday 05:00 UTC — detect new SOLVE-IT releases
+    - cron: '0 5 * * *'   # Daily 05:00 UTC — detect new SOLVE-IT releases
   workflow_dispatch:
     inputs:
       force:
@@ -167,9 +167,11 @@ jobs:
           push: true
           tags: |
             ${{ env.GHCR_REPO }}:${{ needs.check.outputs.image_tag }}
+            ${{ env.GHCR_REPO }}:release
             ${{ env.GHCR_REPO }}:latest
             ${{ env.GHCR_REPO }}:sha-${{ needs.check.outputs.mcp_sha }}
             ${{ vars.DOCKERHUB_REPO != '' && format('{0}:{1}', env.DOCKERHUB_REPO, needs.check.outputs.image_tag) || '' }}
+            ${{ vars.DOCKERHUB_REPO != '' && format('{0}:release', env.DOCKERHUB_REPO) || '' }}
             ${{ vars.DOCKERHUB_REPO != '' && format('{0}:latest', env.DOCKERHUB_REPO) || '' }}
           build-args: |
             SOLVE_IT_MODE=release
