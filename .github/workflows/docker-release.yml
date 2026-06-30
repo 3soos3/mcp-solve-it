@@ -370,12 +370,12 @@ jobs:
   #   Sandbox account: sandbox.zenodo.org (separate registration from production)
 
   zenodo-deposit:
-    name: Zenodo deposit (${{ inputs.zenodo_sandbox == 'true' && 'sandbox' || 'production' }})
+    name: Zenodo deposit (${{ inputs.zenodo_sandbox && 'sandbox' || 'production' }})
     needs: [check, build, trivy-scan, sign]
     if: |
       needs.check.outputs.rebuild == 'true' && (
-        (inputs.zenodo_sandbox == 'true' && vars.ZENODO_SANDBOX_CONCEPT != '') ||
-        (inputs.zenodo_sandbox != 'true' && vars.ZENODO_RELEASES_CONCEPT != '')
+        (inputs.zenodo_sandbox && vars.ZENODO_SANDBOX_CONCEPT != '') ||
+        (!inputs.zenodo_sandbox && vars.ZENODO_RELEASES_CONCEPT != '')
       )
     runs-on: ubuntu-latest
     permissions:
@@ -442,9 +442,9 @@ jobs:
       - name: Deposit to Zenodo
         id: zenodo
         env:
-          ZENODO_TOKEN: ${{ inputs.zenodo_sandbox == 'true' && secrets.ZENODO_SANDBOX_TOKEN || secrets.ZENODO_RELEASES_TOKEN }}
-          CONCEPT_ID: ${{ inputs.zenodo_sandbox == 'true' && vars.ZENODO_SANDBOX_CONCEPT || vars.ZENODO_RELEASES_CONCEPT }}
-          ZENODO_BASE: ${{ inputs.zenodo_sandbox == 'true' && 'https://sandbox.zenodo.org/api' || 'https://zenodo.org/api' }}
+          ZENODO_TOKEN: ${{ inputs.zenodo_sandbox && secrets.ZENODO_SANDBOX_TOKEN || secrets.ZENODO_RELEASES_TOKEN }}
+          CONCEPT_ID: ${{ inputs.zenodo_sandbox && vars.ZENODO_SANDBOX_CONCEPT || vars.ZENODO_RELEASES_CONCEPT }}
+          ZENODO_BASE: ${{ inputs.zenodo_sandbox && 'https://sandbox.zenodo.org/api' || 'https://zenodo.org/api' }}
           TAG: ${{ needs.check.outputs.image_tag }}
           DIGEST: ${{ needs.build.outputs.digest }}
         run: |
