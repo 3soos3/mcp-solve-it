@@ -41,8 +41,7 @@ jobs:
     needs: changes
     if: |
       needs.changes.outputs.dependencies == 'true' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
     steps:
