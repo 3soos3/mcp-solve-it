@@ -24,7 +24,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src/ src/
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e ".[dev]"
+    pip install --no-cache-dir -e ".[dev,otel]"
 
 # Copy config directory (can be overridden by volume mount)
 COPY --chown=mcpuser:mcpuser config/ /app/config/
@@ -43,7 +43,7 @@ ENV PYTHONPATH=/app/src \
     MCP_CHASSIS_CONFIG=/app/config/default.toml \
     SOLVE_IT_DATA_PATH=/app/solve-it-main/data \
     MCP_TRANSPORT=stdio \
-    OTEL_ENABLED=false \
+    MCP_OTEL_ENABLED=false \
     ENVIRONMENT=development \
     LOG_LEVEL=DEBUG \
     LOG_FORMAT=text

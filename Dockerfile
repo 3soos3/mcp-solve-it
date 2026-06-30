@@ -32,7 +32,7 @@ COPY pyproject.toml README.md ./
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir ".[solveit]"
+    pip install --no-cache-dir ".[solveit,otel]"
 
 # Clone SOLVE-IT data while git and pip are still available.
 # SHA checkout: reproducible (monthly/latest). Tag checkout: pinned release.
