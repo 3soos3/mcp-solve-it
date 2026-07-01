@@ -121,15 +121,122 @@ def compute_kb_version_id(data_path: str, algorithm: str = "sha2-256") -> str:
 # ── Ed25519 signing (FSS-0005 §6, required for Level 3) ───────────────
 
 
-def load_signing_key() -> Any | None:
-    """Load the Ed25519 signing key from environment.
+def _compute_key_id(private_key: Any) -> str:
+    """Compute a stable JWK thumbprint (kid) for an Ed25519 private key.
 
-    Reads from FSS_SIGNING_KEY_PATH (PEM file) or FSS_SIGNING_KEY_B64
-    (base64-encoded raw 32-byte key). Returns None if neither is set,
-    making signing optional for deployments without HSM.
+    SHA-256 of the raw 32-byte public key, base64url-encoded without padding.
+    Same key always produces the same kid; different keys always differ.
+    """
+    from cryptography.hazmat.primitives import serialization
+
+    raw = private_key.public_key().public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
+    return base64.urlsafe_b64encode(hashlib.sha256(raw).digest()).rstrip(b"=").decode("ascii")
+
+
+def ensure_signing_key_pair(key_dir: str | Path | None = None) -> Any | None:
+    """Load or auto-generate an Ed25519 key pair.
+
+    Resolution order:
+      1. priv.pem + pub.pem in key_dir (or FSS_KEY_DIR env var, default
+         /run/secrets/fss-keys).  Both files must exist and be valid.
+      2. If neither file exists, generate a new pair and write them.
+         priv.pem is chmod 0o600; pub.pem is 0o644.
+      3. Return None if the directory is not writable or cryptography is missing.
+
+    A runtime-generated key survives the container lifetime but not a restart
+    unless key_dir is on a persistent volume.  Mount a volume at FSS_KEY_DIR
+    to keep the same key across :live restarts so old records stay verifiable.
 
     Returns:
-        Ed25519PrivateKey or None if not configured / cryptography missing.
+        Ed25519PrivateKey or None.
+    """
+    import os
+
+    if not _CRYPTO_AVAILABLE:
+        return None
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+        Ed25519PrivateKey as _Ed25519PrivateKey,
+    )
+
+    if key_dir is None:
+        key_dir = os.environ.get("FSS_KEY_DIR", "/run/secrets/fss-keys")
+    key_dir = Path(key_dir)
+    priv_path = key_dir / "priv.pem"
+    pub_path = key_dir / "pub.pem"
+
+    if priv_path.exists() and pub_path.exists():
+        try:
+            key = load_pem_private_key(priv_path.read_bytes(), password=None)
+            logger.debug("Loaded signing key pair from %s", key_dir)
+            return key
+        except Exception as exc:
+            logger.error("Invalid signing key pair at %s: %s", key_dir, exc)
+            return None
+
+    if priv_path.exists() != pub_path.exists():
+        logger.error(
+            "Incomplete key pair at %s — only one of priv.pem/pub.pem exists. "
+            "Remove both to trigger auto-generation.",
+            key_dir,
+        )
+        return None
+
+    # Neither file exists — generate a new pair
+    try:
+        key_dir.mkdir(parents=True, exist_ok=True)
+        private_key = _Ed25519PrivateKey.generate()
+
+        priv_path.write_bytes(
+            private_key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            )
+        )
+        priv_path.chmod(0o600)
+
+        pub_path.write_bytes(
+            private_key.public_key().public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+        )
+        pub_path.chmod(0o644)
+
+        logger.info(
+            "Generated Ed25519 key pair at %s (kid=%s). "
+            "Mount %s on a persistent volume to survive container restarts.",
+            key_dir,
+            _compute_key_id(private_key),
+            key_dir,
+        )
+        return private_key
+    except OSError as exc:
+        logger.warning(
+            "Cannot write key pair to %s: %s — signing disabled. "
+            "Set FSS_KEY_DIR to a writable path or mount a volume.",
+            key_dir,
+            exc,
+        )
+        return None
+
+
+def load_signing_key() -> Any | None:
+    """Load the Ed25519 signing key.
+
+    Resolution order:
+      1. FSS_SIGNING_KEY_PATH — path to a PEM private key file.
+      2. FSS_SIGNING_KEY_B64 — base64-encoded raw 32-byte private key.
+      3. Auto-generated pair via ensure_signing_key_pair() (FSS_KEY_DIR or
+         /run/secrets/fss-keys).
+
+    Returns:
+        Ed25519PrivateKey or None if unavailable.
     """
     import os
 
@@ -140,8 +247,7 @@ def load_signing_key() -> Any | None:
     key_path = os.environ.get("FSS_SIGNING_KEY_PATH")
     if key_path:
         try:
-            pem_bytes = Path(key_path).read_bytes()
-            return load_pem_private_key(pem_bytes, password=None)
+            return load_pem_private_key(Path(key_path).read_bytes(), password=None)
         except Exception as exc:
             logger.error("Failed to load signing key from %s: %s", key_path, exc)
             return None
@@ -155,28 +261,36 @@ def load_signing_key() -> Any | None:
             logger.error("Failed to load signing key from FSS_SIGNING_KEY_B64: %s", exc)
             return None
 
-    return None
+    return ensure_signing_key_pair()
 
 
-def sign_provenance(payload: dict[str, Any], key: Any) -> str:
+def sign_provenance(payload: dict[str, Any], key: Any) -> dict[str, str]:
     """Sign the FSS provenance payload with Ed25519.
 
-    Signed fields (FSS-0005 §6.1):
-        transaction_id, tool_name, tool_version, result_cai, timestamp_utc
+    Signed fields: transaction_id, tool_name, tool_version, kb_version_id,
+    parameters_cai, result_cai, timestamp_utc.
 
     Args:
-        payload: The full _provenance dict (only FSS-required fields signed).
+        payload: The full _provenance dict.
         key: Ed25519PrivateKey from load_signing_key().
 
     Returns:
-        Base64url-encoded signature string.
+        Dict with 'value' (base64url signature) and 'kid' (key identifier).
     """
     if not _CRYPTO_AVAILABLE:
         raise RuntimeError("cryptography package required for signing")
 
     signed_fields = {
         k: payload[k]
-        for k in ("transaction_id", "tool_name", "tool_version", "result_cai", "timestamp_utc")
+        for k in (
+            "transaction_id",
+            "tool_name",
+            "tool_version",
+            "kb_version_id",
+            "parameters_cai",
+            "result_cai",
+            "timestamp_utc",
+        )
         if k in payload
     }
     if _JCS_AVAILABLE:
@@ -184,14 +298,18 @@ def sign_provenance(payload: dict[str, Any], key: Any) -> str:
     else:
         message = json.dumps(signed_fields, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
-    signature_bytes = key.sign(message)
-    return base64.urlsafe_b64encode(signature_bytes).rstrip(b"=").decode("ascii")
+    sig_bytes = key.sign(message)
+    return {
+        "value": base64.urlsafe_b64encode(sig_bytes).rstrip(b"=").decode("ascii"),
+        "kid": _compute_key_id(key),
+    }
 
 
 __all__ = [
     "compute_cai",
     "compute_json_cai",
     "compute_kb_version_id",
+    "ensure_signing_key_pair",
     "load_signing_key",
     "sign_provenance",
 ]

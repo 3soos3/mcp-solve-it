@@ -247,5 +247,8 @@ class TestSignatureField:
         )
         record = build_provenance_record("solveit_search", "1.0.0")
         assert "signature" in record
-        assert isinstance(record["signature"], str)
-        assert len(record["signature"]) > 0
+        sig = record["signature"]
+        assert isinstance(sig, dict)
+        assert "value" in sig and "kid" in sig
+        assert len(sig["value"]) > 0
+        assert len(sig["kid"]) > 0
