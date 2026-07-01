@@ -158,13 +158,14 @@ class TestTelemetryManagerEnabled:
             "FORENSIC_METADATA",
         ):
             monkeypatch.delenv(key, raising=False)
+        import mcp_chassis
         from mcp_chassis.utils.telemetry import TelemetryManager
 
         TelemetryManager()
         attrs = mock_otel["Resource"].create.call_args[0][0]
         assert attrs["service.name"] == "mcp-solve-it"
         assert attrs["deployment.environment"] == "production"
-        assert attrs["service.version"] == "unknown"
+        assert attrs["service.version"] == mcp_chassis.__version__
 
     def test_resource_built_with_env_vars(
         self, monkeypatch: pytest.MonkeyPatch, mock_otel: dict
@@ -175,13 +176,14 @@ class TestTelemetryManagerEnabled:
         monkeypatch.setenv("SOLVE_IT_VERSION", "1.2.3")
         monkeypatch.setenv("SOLVE_IT_MODE", "bundle")
         monkeypatch.setenv("FORENSIC_METADATA", "true")
+        import mcp_chassis
         from mcp_chassis.utils.telemetry import TelemetryManager
 
         TelemetryManager()
         attrs = mock_otel["Resource"].create.call_args[0][0]
         assert attrs["service.name"] == "my-svc"
         assert attrs["deployment.environment"] == "staging"
-        assert attrs["service.version"] == "1.2.3"
+        assert attrs["service.version"] == mcp_chassis.__version__
         assert attrs["solve_it.mode"] == "bundle"
         assert attrs["solve_it.version"] == "1.2.3"
         assert attrs["forensic_metadata"] == "true"
@@ -450,11 +452,12 @@ class TestTelemetryManagerRealSDK:
         monkeypatch.setenv("SOLVE_IT_VERSION", "1.2.3")
         monkeypatch.setenv("SOLVE_IT_MODE", "bundle")
         monkeypatch.setenv("FORENSIC_METADATA", "true")
+        import mcp_chassis
         from mcp_chassis.utils.telemetry import TelemetryManager
 
         TelemetryManager()
         attrs = dict(real_sdk_setup["captured"]["tracer_provider"].resource.attributes)
-        assert attrs["service.version"] == "1.2.3"
+        assert attrs["service.version"] == mcp_chassis.__version__
         assert attrs["solve_it.mode"] == "bundle"
         assert attrs["solve_it.version"] == "1.2.3"
         assert attrs["forensic_metadata"] == "true"

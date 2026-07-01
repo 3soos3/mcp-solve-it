@@ -179,6 +179,17 @@ def on_init(server: ChassisServer) -> None:
 
         # Compute and cache KB version CAI for FSS provenance records (L1-03)
         kb_version = os.environ.get("SOLVE_IT_VERSION", "unknown")
+        if kb_version == "unknown":
+            # Fallback: read the SHA written by the live-mode entrypoint so the
+            # OTel resource reflects the actual pulled version even when
+            # SOLVE_IT_VERSION was not set in the environment before Python started.
+            try:
+                sha = (data_path / ".sha").read_text().strip()
+                if sha:
+                    kb_version = f"sha-{sha[:7]}"
+                    os.environ["SOLVE_IT_VERSION"] = kb_version
+            except OSError:
+                pass
         server._kb_version = kb_version
         try:
             from mcp_chassis.utils.integrity import compute_kb_version_id
