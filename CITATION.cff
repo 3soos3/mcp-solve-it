@@ -9,8 +9,8 @@ authors:
 repository-code: "https://github.com/3soos3/mcp-solve-it"
 url: "https://github.com/3soos3/mcp-solve-it"
 license: MIT
-version: "0.1.0"
-date-released: "2026-06-28"
+version: "1.1.0"
+date-released: "2026-07-01"
 keywords:
   - digital-forensics
   - mcp-server
