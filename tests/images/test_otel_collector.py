@@ -156,10 +156,15 @@ def _run_tool_with_receiver(
     """
     endpoint = f"MCP_OTEL_ENDPOINT=http://127.0.0.1:{collector_port}"
     cmd = [
-        "podman", "run", "--rm", "-i",
+        "podman",
+        "run",
+        "--rm",
+        "-i",
         "--network=host",
-        "-e", "MCP_TRANSPORT=stdio",
-        "-e", endpoint,
+        "-e",
+        "MCP_TRANSPORT=stdio",
+        "-e",
+        endpoint,
     ]
     for e in extra_env:
         cmd += ["-e", e]
@@ -194,22 +199,31 @@ def _run_tool_with_receiver(
             pass
 
     try:
-        send({
-            "jsonrpc": "2.0", "id": 1, "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05", "capabilities": {},
-                "clientInfo": {"name": "otel-collector-test", "version": "1.0"},
-            },
-        })
+        send(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "otel-collector-test", "version": "1.0"},
+                },
+            }
+        )
         if not _readline(15):
             proc.kill()
             return {"_error": "no initialize response"}
 
         send({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
-        send({
-            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
-            "params": {"name": tool, "arguments": {}},
-        })
+        send(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": tool, "arguments": {}},
+            }
+        )
 
         response: dict[str, Any] = {}
         for _ in range(40):
@@ -335,7 +349,8 @@ class TestOTelExports:
     def test_call_counter_received(self) -> None:
         m = _find_metric(self.receiver.metric_requests, "mcp.tool.calls")
         assert m is not None, (
-            f"mcp.tool.calls not received. Got: {_received_metric_names(self.receiver.metric_requests)}"
+            "mcp.tool.calls not received. "
+            f"Got: {_received_metric_names(self.receiver.metric_requests)}"
         )
 
     def test_call_counter_value_is_one(self) -> None:
@@ -347,7 +362,8 @@ class TestOTelExports:
     def test_duration_histogram_received(self) -> None:
         m = _find_metric(self.receiver.metric_requests, "mcp.tool.duration")
         assert m is not None, (
-            f"mcp.tool.duration not received. Got: {_received_metric_names(self.receiver.metric_requests)}"
+            "mcp.tool.duration not received. "
+            f"Got: {_received_metric_names(self.receiver.metric_requests)}"
         )
 
     def test_duration_histogram_has_one_observation(self) -> None:
@@ -367,9 +383,7 @@ class TestOTelExports:
             "mcp.provenance.responses",
         }
         missing = expected - names
-        assert not missing, (
-            f"Missing expected metrics: {missing}. Got: {names}"
-        )
+        assert not missing, f"Missing expected metrics: {missing}. Got: {names}"
 
     def test_metrics_resource_matches_span_resource(self) -> None:
         """Tracer and meter built from same Resource — service.name must agree."""

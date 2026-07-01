@@ -35,7 +35,9 @@ def mock_otel(monkeypatch: pytest.MonkeyPatch) -> dict:
         "opentelemetry.sdk.trace": MagicMock(TracerProvider=mock_tracer_provider_cls),
         "opentelemetry.sdk.metrics": MagicMock(MeterProvider=mock_meter_provider_cls),
         "opentelemetry.sdk.resources": MagicMock(Resource=mock_resource_cls),
-        "opentelemetry.sdk.trace.export": MagicMock(BatchSpanProcessor=mock_batch_span_processor_cls),
+        "opentelemetry.sdk.trace.export": MagicMock(
+            BatchSpanProcessor=mock_batch_span_processor_cls
+        ),
         "opentelemetry.sdk.metrics.export": MagicMock(
             PeriodicExportingMetricReader=mock_periodic_reader_cls
         ),
@@ -85,9 +87,7 @@ class TestTelemetryManagerDisabled:
 
         assert TelemetryManager().enabled is False
 
-    def test_tracer_and_meter_are_none_when_disabled(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_tracer_and_meter_are_none_when_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("MCP_OTEL_ENABLED", raising=False)
         from mcp_chassis.utils.telemetry import TelemetryManager
 
@@ -95,18 +95,14 @@ class TestTelemetryManagerDisabled:
         assert m._tracer is None
         assert m._meter is None
 
-    def test_start_span_returns_noop_when_disabled(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_start_span_returns_noop_when_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("MCP_OTEL_ENABLED", raising=False)
         from mcp_chassis.utils.telemetry import TelemetryManager, _NoOpSpan
 
         with TelemetryManager().start_span("op") as span:
             assert isinstance(span, _NoOpSpan)
 
-    def test_get_meter_returns_none_when_disabled(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_get_meter_returns_none_when_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("MCP_OTEL_ENABLED", raising=False)
         from mcp_chassis.utils.telemetry import TelemetryManager
 
@@ -154,8 +150,13 @@ class TestTelemetryManagerEnabled:
         self, monkeypatch: pytest.MonkeyPatch, mock_otel: dict
     ) -> None:
         monkeypatch.setenv("MCP_OTEL_ENABLED", "true")
-        for key in ("MCP_OTEL_SERVICE_NAME", "MCP_OTEL_ENVIRONMENT", "SOLVE_IT_VERSION",
-                    "SOLVE_IT_MODE", "FORENSIC_METADATA"):
+        for key in (
+            "MCP_OTEL_SERVICE_NAME",
+            "MCP_OTEL_ENVIRONMENT",
+            "SOLVE_IT_VERSION",
+            "SOLVE_IT_MODE",
+            "FORENSIC_METADATA",
+        ):
             monkeypatch.delenv(key, raising=False)
         from mcp_chassis.utils.telemetry import TelemetryManager
 
@@ -205,7 +206,9 @@ class TestTelemetryManagerEnabled:
 
         TelemetryManager()
         mock_otel["OTLPSpanExporter"].assert_called_once_with(endpoint="http://otel-collector:4317")
-        mock_otel["OTLPMetricExporter"].assert_called_once_with(endpoint="http://otel-collector:4317")
+        mock_otel["OTLPMetricExporter"].assert_called_once_with(
+            endpoint="http://otel-collector:4317"
+        )
 
     def test_start_span_delegates_to_tracer(
         self, monkeypatch: pytest.MonkeyPatch, mock_otel: dict

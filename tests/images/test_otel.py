@@ -72,16 +72,18 @@ def _run_tool_capture_stderr(
             pass
 
     try:
-        send({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "otel-image-test", "version": "1.0"},
-            },
-        })
+        send(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "otel-image-test", "version": "1.0"},
+                },
+            }
+        )
 
         raw = _readline_timeout(proc, timeout=15)
         if not raw:
@@ -90,12 +92,14 @@ def _run_tool_capture_stderr(
             return {"_error": "no initialize response"}, stderr
 
         send({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
-        send({
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/call",
-            "params": {"name": tool, "arguments": {}},
-        })
+        send(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": tool, "arguments": {}},
+            }
+        )
 
         response: dict[str, Any] = {}
         for _ in range(40):
@@ -161,9 +165,7 @@ class TestOTelInContainer:
             "solveit_status",
             extra_env=(FAST_FAIL, _OTEL_ENABLED, _FAKE_ENDPOINT),
         )
-        assert "_error" not in resp, (
-            f"Server crashed or timed out with OTel enabled:\n{resp}"
-        )
+        assert "_error" not in resp, f"Server crashed or timed out with OTel enabled:\n{resp}"
         content = resp.get("result", {}).get("content", [])
         assert content, "Expected non-empty content in solveit_status response"
 
