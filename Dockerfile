@@ -81,10 +81,10 @@ LABEL org.opencontainers.image.created="${BUILD_DATE:-1970-01-01T00:00:00Z}" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.base.name="docker.io/library/python:3.11-alpine"
 
-# wget + unzip only needed in live mode
+# wget only needed in live mode (tar is available in busybox)
 RUN set -e; \
     EXTRA_PKGS=""; \
-    if [ "$SOLVE_IT_MODE" = "live" ]; then EXTRA_PKGS="wget unzip"; fi; \
+    if [ "$SOLVE_IT_MODE" = "live" ]; then EXTRA_PKGS="wget"; fi; \
     apk add --no-cache ca-certificates libffi openssl $EXTRA_PKGS && \
     addgroup -g 1000 mcpuser && \
     adduser -D -u 1000 -G mcpuser -h /home/mcpuser -s /bin/sh mcpuser && \
@@ -123,7 +123,9 @@ ENV PYTHONPATH=/app/src:/app/solve-it-main \
     FORENSIC_METADATA=${FORENSIC_METADATA} \
     SOLVE_IT_VERSION=${SOLVE_IT_VERSION} \
     MCP_APP_SOLVEIT_DATA_PATH=/app/solve-it-main \
-    SOLVE_IT_DATA_URL=https://data.solveit-df.org/solve-it-latest.zip \
+    SOLVE_IT_REPO=SOLVE-IT-DF/solve-it \
+    SOLVE_IT_BRANCH=main \
+    SOLVE_IT_LIVE_UPDATES=true \
     SOLVE_IT_DATA_DIR=/tmp/app-cache/solve-it
 
 EXPOSE 8000
