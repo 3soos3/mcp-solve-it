@@ -119,12 +119,88 @@ class TestComputeKbVersionId:
         assert compute_kb_version_id(str(tmp_path)) == compute_kb_version_id(str(tmp_path))
 
 
-class TestLoadSigningKey:
-    """Tests for load_signing_key — Ed25519 key loading."""
+class TestEnsureSigningKeyPair:
+    """Tests for ensure_signing_key_pair — auto-generation and loading."""
 
-    def test_no_env_vars_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_generates_key_pair_when_absent(self, tmp_path: pathlib.Path) -> None:
+        pytest.importorskip("cryptography")
+        from mcp_chassis.utils.integrity import ensure_signing_key_pair
+
+        key = ensure_signing_key_pair(tmp_path)
+        assert key is not None
+        assert (tmp_path / "priv.pem").exists()
+        assert (tmp_path / "pub.pem").exists()
+
+    def test_priv_pem_has_restricted_permissions(self, tmp_path: pathlib.Path) -> None:
+        pytest.importorskip("cryptography")
+        from mcp_chassis.utils.integrity import ensure_signing_key_pair
+
+        ensure_signing_key_pair(tmp_path)
+        mode = (tmp_path / "priv.pem").stat().st_mode & 0o777
+        assert mode == 0o600
+
+    def test_loads_existing_pair(self, tmp_path: pathlib.Path) -> None:
+        pytest.importorskip("cryptography")
+        from mcp_chassis.utils.integrity import ensure_signing_key_pair
+
+        key1 = ensure_signing_key_pair(tmp_path)
+        key2 = ensure_signing_key_pair(tmp_path)
+        assert key1 is not None and key2 is not None
+        # Same key material — public keys match
+        from cryptography.hazmat.primitives import serialization
+
+        pub1 = key1.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw
+        )
+        pub2 = key2.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw
+        )
+        assert pub1 == pub2
+
+    def test_kid_is_stable_for_same_key(self, tmp_path: pathlib.Path) -> None:
+        pytest.importorskip("cryptography")
+        from mcp_chassis.utils.integrity import _compute_key_id, ensure_signing_key_pair
+
+        key1 = ensure_signing_key_pair(tmp_path)
+        key2 = ensure_signing_key_pair(tmp_path)
+        assert _compute_key_id(key1) == _compute_key_id(key2)
+
+    def test_returns_none_for_incomplete_pair(self, tmp_path: pathlib.Path) -> None:
+        pytest.importorskip("cryptography")
+        from mcp_chassis.utils.integrity import ensure_signing_key_pair
+
+        (tmp_path / "priv.pem").write_bytes(b"stub")
+        assert ensure_signing_key_pair(tmp_path) is None
+
+    def test_returns_none_for_unwritable_dir(self, tmp_path: pathlib.Path) -> None:
+        pytest.importorskip("cryptography")
+        from mcp_chassis.utils.integrity import ensure_signing_key_pair
+
+        ro_dir = tmp_path / "readonly"
+        ro_dir.mkdir(mode=0o555)
+        assert ensure_signing_key_pair(ro_dir) is None
+
+
+class TestLoadSigningKey:
+    """Tests for load_signing_key — priority: env vars > auto-generated pair."""
+
+    def test_no_env_vars_falls_back_to_auto_generate(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pytest.importorskip("cryptography")
         monkeypatch.delenv("FSS_SIGNING_KEY_PATH", raising=False)
         monkeypatch.delenv("FSS_SIGNING_KEY_B64", raising=False)
+        monkeypatch.setenv("FSS_KEY_DIR", str(tmp_path))
+        key = load_signing_key()
+        assert key is not None
+        assert (tmp_path / "priv.pem").exists()
+
+    def test_no_env_vars_no_writable_dir_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("FSS_SIGNING_KEY_PATH", raising=False)
+        monkeypatch.delenv("FSS_SIGNING_KEY_B64", raising=False)
+        monkeypatch.setenv("FSS_KEY_DIR", "/nonexistent/readonly/path")
         assert load_signing_key() is None
 
     def test_missing_key_file_returns_none(
@@ -150,7 +226,7 @@ class TestEd25519Signing:
 
         return Ed25519PrivateKey.generate()
 
-    def test_sign_provenance_returns_base64url_string(self, signing_key: object) -> None:
+    def test_sign_provenance_returns_dict_with_value_and_kid(self, signing_key: object) -> None:
         from mcp_chassis.utils.integrity import sign_provenance
 
         payload = {
@@ -161,11 +237,11 @@ class TestEd25519Signing:
             "timestamp_utc": "2026-06-29T10:00:00.000Z",
         }
         sig = sign_provenance(payload, signing_key)
-        assert isinstance(sig, str)
-        assert len(sig) > 0
-        # Base64url chars only (no +, /, =)
+        assert isinstance(sig, dict)
+        assert "value" in sig and "kid" in sig
         valid_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
-        assert all(c in valid_chars for c in sig)
+        assert all(c in valid_chars for c in sig["value"])
+        assert all(c in valid_chars for c in sig["kid"])
 
     def test_sign_verify_round_trip(self, signing_key: object) -> None:
         import base64
@@ -181,22 +257,50 @@ class TestEd25519Signing:
             "transaction_id": "abc-123",
             "tool_name": "solveit_get_technique",
             "tool_version": "1.0.0",
+            "kb_version_id": "sha2-256:deadbeef",
+            "parameters_cai": "sha2-256:params",
             "result_cai": "sha2-256:deadbeef",
             "timestamp_utc": "2026-06-29T12:00:00.000Z",
         }
         sig = sign_provenance(payload, signing_key)
-        sig_bytes = base64.urlsafe_b64decode(sig + "==")
+        sig_bytes = base64.urlsafe_b64decode(sig["value"] + "==")
 
-        # Reconstruct message the same way sign_provenance does
+        # Reconstruct the signed fields in the same order sign_provenance uses
+        signed_fields = {
+            k: payload[k]
+            for k in (
+                "transaction_id",
+                "tool_name",
+                "tool_version",
+                "kb_version_id",
+                "parameters_cai",
+                "result_cai",
+                "timestamp_utc",
+            )
+            if k in payload
+        }
         try:
             import jcs
 
-            message = jcs.canonicalize(payload)
+            message = jcs.canonicalize(signed_fields)
         except ImportError:
-            message = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+            message = json.dumps(signed_fields, sort_keys=True, separators=(",", ":")).encode()
 
-        # Should not raise — valid signature
         public_key.verify(sig_bytes, message)
+
+    def test_same_kid_for_same_key(self, signing_key: object) -> None:
+        from mcp_chassis.utils.integrity import sign_provenance
+
+        payload = {
+            "transaction_id": "t1",
+            "tool_name": "tool",
+            "tool_version": "1.0.0",
+            "result_cai": "sha2-256:abc",
+            "timestamp_utc": "2026-06-29T00:00:00.000Z",
+        }
+        sig1 = sign_provenance(payload, signing_key)
+        sig2 = sign_provenance({**payload, "transaction_id": "t2"}, signing_key)
+        assert sig1["kid"] == sig2["kid"]
 
     def test_different_payload_different_signature(self, signing_key: object) -> None:
         from mcp_chassis.utils.integrity import sign_provenance
@@ -209,7 +313,10 @@ class TestEd25519Signing:
             "timestamp_utc": "2026-06-29T00:00:00.000Z",
         }
         modified = {**base, "result_cai": "sha2-256:def"}
-        assert sign_provenance(base, signing_key) != sign_provenance(modified, signing_key)
+        assert (
+            sign_provenance(base, signing_key)["value"]
+            != sign_provenance(modified, signing_key)["value"]
+        )
 
     def test_load_and_use_generated_key(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
@@ -243,5 +350,5 @@ class TestEd25519Signing:
             "timestamp_utc": "2026-06-29T00:00:00.000Z",
         }
         sig = sign_provenance(payload, loaded_key)
-        assert isinstance(sig, str)
-        assert len(sig) > 0
+        assert isinstance(sig, dict)
+        assert "value" in sig and "kid" in sig
