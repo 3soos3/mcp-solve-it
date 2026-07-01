@@ -54,10 +54,12 @@ class TelemetryManager:
             from opentelemetry.sdk.trace import TracerProvider
             from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+            import mcp_chassis
+
             resource = Resource.create(
                 {
                     "service.name": service_name,
-                    "service.version": os.environ.get("SOLVE_IT_VERSION", "unknown"),
+                    "service.version": mcp_chassis.__version__,
                     "deployment.environment": environment,
                     "solve_it.mode": os.environ.get("SOLVE_IT_MODE", "unknown"),
                     "solve_it.version": os.environ.get("SOLVE_IT_VERSION", "unknown"),
