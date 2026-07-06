@@ -46,7 +46,8 @@ provider = "none"
 # -- Other general MCP server settings -------------------------------
 [extensions]
 auto_discover = true
-init_module = "mcp_chassis.extensions.solveit_init"
+init_module = "fss_mcp_solve_it.solveit_init"
+discovery_packages = ["fss_mcp_solve_it.tools"]
 
 [diagnostics]
 health_check_enabled = true

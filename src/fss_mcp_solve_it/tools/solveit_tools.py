@@ -12,11 +12,11 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from mcp_chassis.extensions.batch import register_simple_tools
+from fss_mcp.extensions.batch import register_simple_tools
 
 if TYPE_CHECKING:
-    from mcp_chassis.context import HandlerContext
-    from mcp_chassis.server import ChassisServer
+    from fss_mcp.context import HandlerContext
+    from fss_mcp.server import ChassisServer
 
 logger = logging.getLogger(__name__)
 
@@ -733,7 +733,7 @@ def _register_search_tool(server: ChassisServer, kb: Any) -> None:
             search_logic=search_logic,
         )
         try:
-            from mcp_chassis.utils.metrics import get_metrics
+            from fss_mcp.utils.metrics import get_metrics
 
             get_metrics().record_search_results(len(result) if isinstance(result, list) else 0)
         except Exception:

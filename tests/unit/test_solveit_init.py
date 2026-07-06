@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from mcp_chassis.extensions.solveit_init import on_init
+from fss_mcp_solve_it.solveit_init import on_init
 
 _SOLVEIT_PATH = str((Path(__file__).resolve().parents[3] / "solve-it-main").resolve())
 

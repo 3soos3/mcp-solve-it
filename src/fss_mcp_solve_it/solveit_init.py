@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from mcp_chassis.server import ChassisServer
+    from fss_mcp.server import ChassisServer
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +192,7 @@ def on_init(server: ChassisServer) -> None:
                 pass
         server._kb_version = kb_version
         try:
-            from mcp_chassis.utils.integrity import compute_kb_version_id
+            from fss_core.integrity import compute_kb_version_id
 
             server._kb_version_id = compute_kb_version_id(str(data_path))
             logger.info("KB version CAI: %s", server._kb_version_id)
@@ -215,7 +215,7 @@ def on_init(server: ChassisServer) -> None:
             kb_version,
         )
         try:
-            from mcp_chassis.utils.metrics import get_metrics
+            from fss_mcp.utils.metrics import get_metrics
 
             get_metrics().register_kb_gauges(
                 loaded=True,
@@ -227,7 +227,7 @@ def on_init(server: ChassisServer) -> None:
             pass
 
         try:
-            from mcp_chassis.utils.telemetry import get_telemetry
+            from fss_mcp.utils.telemetry import get_telemetry
 
             tm = get_telemetry()
             if tm.enabled:
@@ -246,7 +246,7 @@ def on_init(server: ChassisServer) -> None:
         server._kb_error = msg
 
         try:
-            from mcp_chassis.utils.metrics import get_metrics
+            from fss_mcp.utils.metrics import get_metrics
 
             get_metrics().register_kb_gauges(loaded=False)
         except Exception:

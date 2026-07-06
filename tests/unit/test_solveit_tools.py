@@ -10,9 +10,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from mcp_chassis.config import ServerConfig
-from mcp_chassis.context import HandlerContext
-from mcp_chassis.extensions.solveit_init import SolveItAppConfig
+from fss_mcp.config import ServerConfig
+from fss_mcp.context import HandlerContext
+from fss_mcp_solve_it.solveit_init import SolveItAppConfig
 
 _SOLVEIT_PATH = str((Path(__file__).resolve().parents[3] / "solve-it-main").resolve())
 
@@ -65,7 +65,7 @@ def _load_kb():
 
 class TestStatusToolRegistration:
     def test_status_registered_when_kb_loaded(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(kb=kb)
@@ -73,7 +73,7 @@ class TestStatusToolRegistration:
         assert "solveit_status" in server._registered_tools
 
     def test_status_registered_when_kb_failed(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         server = _make_server(kb=None, kb_error="Test error")
         register(server)
@@ -81,7 +81,7 @@ class TestStatusToolRegistration:
 
     @pytest.mark.asyncio
     async def test_status_returns_ok_when_kb_loaded(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(kb=kb)
@@ -96,7 +96,7 @@ class TestStatusToolRegistration:
 
     @pytest.mark.asyncio
     async def test_status_returns_error_when_kb_failed(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         server = _make_server(kb=None, kb_error="Path not found")
         register(server)
@@ -109,7 +109,7 @@ class TestStatusToolRegistration:
 class TestBatchToolRegistration:
     @pytest.fixture()
     def server_with_kb(self) -> MagicMock:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(kb=kb)
@@ -184,7 +184,7 @@ class TestBatchToolRegistration:
 class TestRelationshipTools:
     @pytest.fixture()
     def server_with_kb(self) -> MagicMock:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(kb=kb)
@@ -254,7 +254,7 @@ class TestRelationshipTools:
 
 class TestSearchTool:
     def test_search_registered(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(kb=kb)
@@ -263,7 +263,7 @@ class TestSearchTool:
 
     @pytest.mark.asyncio
     async def test_search_returns_results(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(kb=kb)
@@ -276,7 +276,7 @@ class TestSearchTool:
 
     @pytest.mark.asyncio
     async def test_search_empty_results(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(kb=kb)
@@ -288,7 +288,7 @@ class TestSearchTool:
         assert result["mitigations"] == []
 
     def test_search_schema_includes_all_params_by_default(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         search_config = {
@@ -306,7 +306,7 @@ class TestSearchTool:
         assert "search_logic" in props
 
     def test_search_schema_excludes_disabled_params(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         search_config = {
@@ -325,7 +325,7 @@ class TestSearchTool:
 
     @pytest.mark.asyncio
     async def test_search_invalid_search_logic(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         search_config = {"enable_search_logic": True}
@@ -340,7 +340,7 @@ class TestSearchTool:
 
 class TestFullDetailTools:
     def test_full_detail_tools_disabled_by_default(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(kb=kb)
@@ -348,7 +348,7 @@ class TestFullDetailTools:
         assert "solveit_list_techniques_full_detail" not in server._registered_tools
 
     def test_full_detail_tools_enabled(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(app_config={"enable_full_detail_tools": True}, kb=kb)
@@ -358,7 +358,7 @@ class TestFullDetailTools:
         assert "solveit_list_mitigations_full_detail" in server._registered_tools
 
     def test_full_detail_description_contains_warning(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(app_config={"enable_full_detail_tools": True}, kb=kb)
@@ -368,7 +368,7 @@ class TestFullDetailTools:
 
     @pytest.mark.asyncio
     async def test_full_detail_returns_data(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(app_config={"enable_full_detail_tools": True}, kb=kb)
@@ -382,7 +382,7 @@ class TestFullDetailTools:
 
 class TestExtensionInfoTool:
     def test_extension_tool_registered(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(kb=kb)
@@ -391,7 +391,7 @@ class TestExtensionInfoTool:
 
     @pytest.mark.asyncio
     async def test_extension_tool_returns_list(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(kb=kb)
@@ -423,7 +423,7 @@ def _make_mock_kb() -> MagicMock:
 class TestCitationTools:
     @pytest.fixture()
     def server_with_kb(self) -> MagicMock:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _make_mock_kb()
         server = _make_server(kb=kb)
@@ -488,7 +488,7 @@ class TestAllToolsRegistered:
     ]
 
     def test_default_config_registers_expected_tools(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(kb=kb)
@@ -500,7 +500,7 @@ class TestAllToolsRegistered:
         assert len(server._registered_tools) >= len(self._ALL_DEFAULT_TOOLS)
 
     def test_full_detail_enabled_registers_expected_tools(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         kb = _load_kb()
         server = _make_server(app_config={"enable_full_detail_tools": True}, kb=kb)
@@ -512,7 +512,7 @@ class TestAllToolsRegistered:
         assert len(server._registered_tools) >= expected
 
     def test_kb_failure_registers_only_status(self) -> None:
-        from mcp_chassis.extensions.tools.solveit_tools import register
+        from fss_mcp_solve_it.tools.solveit_tools import register
 
         server = _make_server(kb=None, kb_error="Test failure")
         register(server)

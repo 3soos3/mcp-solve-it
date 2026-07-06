@@ -3,59 +3,40 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mcp-chassis"
-version = "1.1.0"
+name = "fss-mcp-solve-it"
+version = "1.2.0"
 description = "FSS-compliant MCP server for the SOLVE-IT digital forensics knowledge base"
 requires-python = ">=3.11"
 dependencies = [
-    "mcp>=1.2.0,<2.0",
-    "jcs>=0.2.0",
-]
-
-[project.scripts]
-mcp-chassis = "mcp_chassis.__main__:main"
-
-[project.optional-dependencies]
-# Runtime deps for the solve_it_library (always needed when KB is loaded,
-# whether data is baked in or mounted at runtime via a volume).
-solveit = [
+    "fss-mcp[http,auth,otel]>=1.2.0",
     "pybtex",
     "xlsxwriter",
     "rdflib>=7.0.0",
     "pyyaml",
     "pydantic>=2.0.0",
 ]
-http = [
-    "starlette>=0.37.0",
-    "uvicorn[standard]>=0.27.0",
-    "httpx>=0.25,<1.0",
-]
-auth = [
-    "PyJWT>=2.8.0",
-    "cryptography>=42.0.0",
-    "httpx>=0.25,<1.0",
-]
-otel = [
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
-]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fss_mcp_solve_it"]
+
+[project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
-    "mypy>=1.11.0",
     "ruff>=0.7.0",
-    "locust>=2.20.0",
+    "mypy>=1.11.0",
     "pip-audit>=2.7.0",
+    "locust>=2.20.0",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/mcp_chassis"]
+[tool.uv.sources]
+fss-mcp = { path = "../fss-chassis/packages/fss-mcp", editable = true }
+fss-core = { path = "../fss-chassis/packages/fss-core", editable = true }
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+testpaths = ["tests"]
 markers = [
     "network: requires live network access to SOLVE_IT_DATA_URL (deselect with -m 'not network')",
     "slow: test spawns multiple containers or is otherwise slow",
@@ -65,12 +46,6 @@ markers = [
     "integration: integration tests that require external data or a running server",
 ]
 
-[tool.mypy]
-python_version = "3.11"
-strict = true
-ignore_missing_imports = true
-mypy_path = "src"
-
 [tool.ruff]
 line-length = 100
 target-version = "py311"
@@ -79,3 +54,9 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "B", "UP"]
 ignore = ["B008"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+mypy_path = "src"
