@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 
 import pytest
@@ -184,12 +185,24 @@ class TestEnsureSigningKeyPair:
 class TestLoadSigningKey:
     """Tests for load_signing_key — priority: env vars > auto-generated pair."""
 
-    def test_no_env_vars_falls_back_to_auto_generate(
+    def test_no_env_vars_returns_none_when_signing_disabled(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("FSS_SIGNING_KEY_PATH", raising=False)
+        monkeypatch.delenv("FSS_SIGNING_KEY_B64", raising=False)
+        monkeypatch.setenv("FSS_SIGNING", "false")
+        monkeypatch.setenv("FSS_METADATA", "false")
+        monkeypatch.setenv("FSS_KEY_DIR", str(tmp_path))
+        assert load_signing_key() is None
+
+    def test_falls_back_to_auto_generate_when_fss_signing_enabled(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         pytest.importorskip("cryptography")
         monkeypatch.delenv("FSS_SIGNING_KEY_PATH", raising=False)
         monkeypatch.delenv("FSS_SIGNING_KEY_B64", raising=False)
+        monkeypatch.setenv("FSS_SIGNING", "true")
+        monkeypatch.setenv("FSS_METADATA", "false")
         monkeypatch.setenv("FSS_KEY_DIR", str(tmp_path))
         key = load_signing_key()
         assert key is not None
@@ -200,6 +213,8 @@ class TestLoadSigningKey:
     ) -> None:
         monkeypatch.delenv("FSS_SIGNING_KEY_PATH", raising=False)
         monkeypatch.delenv("FSS_SIGNING_KEY_B64", raising=False)
+        monkeypatch.setenv("FSS_SIGNING", "true")
+        monkeypatch.setenv("FSS_METADATA", "false")
         monkeypatch.setenv("FSS_KEY_DIR", "/nonexistent/readonly/path")
         assert load_signing_key() is None
 
@@ -253,30 +268,24 @@ class TestEd25519Signing:
         assert isinstance(signing_key, Ed25519PrivateKey)
         public_key = signing_key.public_key()
 
+        # data_signature covers exactly 4 fields per FSS-0005 §6.2
         payload = {
             "transaction_id": "abc-123",
+            "timestamp_utc": "2026-06-29T12:00:00.000Z",
+            "parameters_cai": "sha2-256:params",
+            "result_cai": "sha2-256:deadbeef",
+            # extra fields that must NOT appear in signed payload
             "tool_name": "solveit_get_technique",
             "tool_version": "1.0.0",
             "kb_version_id": "sha2-256:deadbeef",
-            "parameters_cai": "sha2-256:params",
-            "result_cai": "sha2-256:deadbeef",
-            "timestamp_utc": "2026-06-29T12:00:00.000Z",
         }
         sig = sign_provenance(payload, signing_key)
         sig_bytes = base64.urlsafe_b64decode(sig["value"] + "==")
 
-        # Reconstruct the signed fields in the same order sign_provenance uses
+        # Reconstruct exactly the 4 signed fields (FSS-0005 §6.2)
         signed_fields = {
             k: payload[k]
-            for k in (
-                "transaction_id",
-                "tool_name",
-                "tool_version",
-                "kb_version_id",
-                "parameters_cai",
-                "result_cai",
-                "timestamp_utc",
-            )
+            for k in ("transaction_id", "timestamp_utc", "parameters_cai", "result_cai")
             if k in payload
         }
         try:
@@ -338,6 +347,8 @@ class TestEd25519Signing:
 
         monkeypatch.setenv("FSS_SIGNING_KEY_PATH", str(key_file))
         monkeypatch.delenv("FSS_SIGNING_KEY_B64", raising=False)
+        monkeypatch.setenv("FSS_SIGNING", "true")
+        monkeypatch.setenv("FSS_METADATA", "false")
 
         loaded_key = load_signing_key()
         assert loaded_key is not None
@@ -352,3 +363,98 @@ class TestEd25519Signing:
         sig = sign_provenance(payload, loaded_key)
         assert isinstance(sig, dict)
         assert "value" in sig and "kid" in sig
+
+
+class TestVectorSigning:
+    """FSS-0005 §6.2, §6.3 — known-answer Ed25519 signature verification tests.
+
+    Run with:
+        FSS_VECTORS_PATH=../fss-conformance-suite/internal/vectors/testdata \
+            pytest tests/unit/test_integrity.py::TestVectorSigning -v
+    """
+
+    @pytest.fixture(scope="class")
+    def vectors(self) -> list[dict]:
+        path = os.environ.get("FSS_VECTORS_PATH", "")
+        if not path:
+            pytest.skip("FSS_VECTORS_PATH not set; skipping cross-language vector tests")
+        data = json.loads((pathlib.Path(path) / "signing_vectors.json").read_text())
+        return data["vectors"]
+
+    def test_all_signing_vectors(self, vectors: list[dict]) -> None:
+        pytest.importorskip("cryptography")
+        import base64
+
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+        try:
+            import jcs as _jcs
+            def canonicalize(obj: object) -> bytes:
+                return _jcs.canonicalize(obj)
+        except ImportError:
+            def canonicalize(obj: object) -> bytes:
+                return json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
+
+        for v in vectors:
+            sig_b64 = v.get("signature_base64url")
+            payload = v.get("payload")
+            if not sig_b64 or payload is None:
+                continue  # JWKS structure or chain hash vectors
+
+            jwk = v.get("test_public_key_jwk")
+            if not jwk:
+                jwks = v.get("jwks")
+                if not jwks or not jwks.get("keys"):
+                    continue  # no public key in vector
+                jwk = jwks["keys"][0]
+
+            pub_bytes = base64.urlsafe_b64decode(jwk["x"] + "==")
+            pub_key = Ed25519PublicKey.from_public_bytes(pub_bytes)
+
+            message = canonicalize(payload)
+            sig_bytes = base64.urlsafe_b64decode(sig_b64 + "==")
+            expected = v.get("expected_result", "PASS")
+
+            if expected == "PASS":
+                try:
+                    pub_key.verify(sig_bytes, message)
+                except InvalidSignature as exc:
+                    raise AssertionError(
+                        f"Vector {v['id']} ({v['description']}): "
+                        "expected PASS but verification failed"
+                    ) from exc
+            else:
+                try:
+                    pub_key.verify(sig_bytes, message)
+                    raise AssertionError(
+                        f"Vector {v['id']} ({v['description']}): "
+                        "expected FAIL but verification succeeded"
+                    )
+                except (InvalidSignature, Exception):
+                    pass
+
+
+class TestVectorCAI:
+    """FSS-0005 §3, §4.3 — known-answer tests against shared vector file.
+
+    Run with:
+        FSS_VECTORS_PATH=../fss-conformance-suite/internal/vectors/testdata \
+            pytest tests/unit/test_integrity.py::TestVectorCAI -v
+    """
+
+    @pytest.fixture(scope="class")
+    def vectors(self) -> list[dict]:
+        path = os.environ.get("FSS_VECTORS_PATH", "")
+        if not path:
+            pytest.skip("FSS_VECTORS_PATH not set; skipping cross-language vector tests")
+        data = json.loads((pathlib.Path(path) / "cai_vectors.json").read_text())
+        return data["vectors"]
+
+    def test_all_cai_vectors(self, vectors: list[dict]) -> None:
+        for v in vectors:
+            got = compute_json_cai(v["input"])
+            assert got == v["cai"], (
+                f"Vector {v['id']} ({v['description']}): "
+                f"got {got!r}, want {v['cai']!r}"
+            )

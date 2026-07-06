@@ -199,6 +199,11 @@ def main(argv: list[str] | None = None) -> None:
             logger.critical("Env file not found: %s", env_path)
             sys.exit(1)
 
+    # Enforce JCS availability when FSS_METADATA=true (evidentiary mode, Level 3+)
+    from mcp_chassis.utils.integrity import check_jcs_required
+
+    check_jcs_required()
+
     config_path = Path(args.config) if args.config else None
 
     asyncio.run(_run_server(config_path, args.log_level))
