@@ -596,3 +596,125 @@ class TestReplayPrevention:
         assert not result.allowed
         assert result.error_code == "FSS_REPLAY_REJECTED"
         fss_request_timestamp.set(None)
+
+
+class TestRunFIT:
+    """Tests for MiddlewarePipeline._run_fit (FSS-0006 §8)."""
+
+    def _make_pipeline(self) -> "MiddlewarePipeline":
+        return MiddlewarePipeline(
+            _make_security_config(
+                rate_limits=RateLimitConfig(enabled=False),
+                input_validation=ValidationConfig(enabled=False),
+                input_sanitization=SanitizationConfig(enabled=False, level="permissive"),
+            )
+        )
+
+    async def test_no_fit_token_passes_through(self) -> None:
+        from mcp_chassis.utils.fss_context import fss_fit_token, fss_investigation_id
+
+        fss_fit_token.set("")
+        fss_investigation_id.set(None)
+        pipeline = self._make_pipeline()
+        result = await pipeline._run_fit("any_tool")
+        assert result is None
+
+    async def test_enforcement_without_investigation_id_passes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from mcp_chassis.utils.fss_context import fss_fit_token, fss_investigation_id
+
+        monkeypatch.setenv("FSS_FIT_ENFORCE", "true")
+        fss_fit_token.set("")
+        fss_investigation_id.set(None)
+        pipeline = self._make_pipeline()
+        result = await pipeline._run_fit("any_tool")
+        assert result is None
+
+    async def test_enforcement_with_investigation_id_no_token_blocks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from mcp_chassis.utils.fss_context import fss_fit_token, fss_investigation_id
+
+        monkeypatch.setenv("FSS_FIT_ENFORCE", "true")
+        fss_fit_token.set("")
+        fss_investigation_id.set("inv-001")
+        pipeline = self._make_pipeline()
+        result = await pipeline._run_fit("any_tool")
+        assert result is not None
+        assert not result.allowed
+        assert result.error_code == "FSS_AUTH_DENIED"
+        fss_fit_token.set("")
+        fss_investigation_id.set(None)
+
+    async def test_valid_fit_token_sets_context_vars(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import AsyncMock, patch
+
+        from mcp_chassis.security.fit import FITClaims
+        from mcp_chassis.utils.fss_context import (
+            fss_fit_aud,
+            fss_fit_issuer,
+            fss_fit_jti,
+            fss_fit_token,
+            fss_investigation_id,
+            fss_investigation_id_verified,
+        )
+
+        fss_fit_token.set("fake.jwt.token")
+        fss_investigation_id.set(None)
+        monkeypatch.delenv("FSS_FIT_ENFORCE", raising=False)
+
+        mock_claims = FITClaims(
+            jti="jti-abc",
+            issuer="https://issuer.example.com",
+            valid_until="2030-01-01T00:00:00Z",
+            aud="srv",
+            legal_authority="law",
+            purpose="test",
+            investigation_id="inv-001",
+            authorized_tools=["any_tool"],
+            authorized_analyst="",
+            invocation_types_permitted=[],
+        )
+
+        with patch(
+            "mcp_chassis.security.fit.verify_fit",
+            new=AsyncMock(return_value=mock_claims),
+        ):
+            pipeline = self._make_pipeline()
+            result = await pipeline._run_fit("any_tool")
+
+        assert result is None
+        assert fss_fit_jti.get() == "jti-abc"
+        assert fss_fit_issuer.get() == "https://issuer.example.com"
+        assert fss_fit_aud.get() == "srv"
+        assert fss_investigation_id_verified.get() is True
+        fss_fit_token.set("")
+
+    async def test_fit_verification_failure_blocks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import AsyncMock, patch
+
+        from mcp_chassis.security.fit import FITVerificationError
+        from mcp_chassis.utils.fss_context import fss_fit_token, fss_investigation_id
+
+        fss_fit_token.set("bad.jwt.token")
+        fss_investigation_id.set(None)
+        monkeypatch.delenv("FSS_FIT_ENFORCE", raising=False)
+
+        with patch(
+            "mcp_chassis.security.fit.verify_fit",
+            new=AsyncMock(
+                side_effect=FITVerificationError(4, "Signature verification failed")
+            ),
+        ):
+            pipeline = self._make_pipeline()
+            result = await pipeline._run_fit("any_tool")
+
+        assert result is not None
+        assert not result.allowed
+        assert result.error_code == "FSS_AUTH_DENIED"
+        fss_fit_token.set("")

@@ -188,3 +188,118 @@ class TestCheckRateLimitHelper:
         config = RateLimitConfig(enabled=True, global_rpm=60, per_tool_rpm=30, burst_size=5)
         limiter = RateLimiter(config)
         check_rate_limit(limiter, "tool")  # Should not raise
+
+
+class TestPerSessionRateLimiting:
+    """Tests for session-aware per-(session, tool) bucket isolation."""
+
+    def test_different_sessions_have_independent_buckets(self) -> None:
+        from mcp_chassis.utils.fss_context import fss_session_id
+
+        config = RateLimitConfig(enabled=True, global_rpm=600, per_tool_rpm=3, burst_size=1)
+        limiter = RateLimiter(config)
+        assert limiter._global_bucket is not None
+        limiter._global_bucket.tokens = 100.0
+        limiter._global_bucket.capacity = 100.0
+
+        # Exhaust session A's per-tool bucket
+        fss_session_id.set("session-a")
+        first = limiter.check("tool")
+        assert first.allowed
+        blocked = limiter.check("tool")
+        assert not blocked.allowed
+
+        # Session B's bucket is untouched — still has tokens
+        fss_session_id.set("session-b")
+        result = limiter.check("tool")
+        assert result.allowed
+
+        fss_session_id.set("")
+
+    def test_same_session_shares_bucket_across_calls(self) -> None:
+        from mcp_chassis.utils.fss_context import fss_session_id
+
+        config = RateLimitConfig(enabled=True, global_rpm=600, per_tool_rpm=3, burst_size=2)
+        limiter = RateLimiter(config)
+        assert limiter._global_bucket is not None
+        limiter._global_bucket.tokens = 100.0
+        limiter._global_bucket.capacity = 100.0
+
+        fss_session_id.set("session-x")
+        limiter.check("tool")
+        limiter.check("tool")
+        # Burst of 2 exhausted — third should be blocked
+        blocked = limiter.check("tool")
+        assert not blocked.allowed
+
+        fss_session_id.set("")
+
+    def test_reset_clears_per_session_state(self) -> None:
+        from mcp_chassis.utils.fss_context import fss_session_id
+
+        config = RateLimitConfig(enabled=True, global_rpm=600, per_tool_rpm=3, burst_size=1)
+        limiter = RateLimiter(config)
+        assert limiter._global_bucket is not None
+        limiter._global_bucket.tokens = 100.0
+        limiter._global_bucket.capacity = 100.0
+
+        fss_session_id.set("session-z")
+        limiter.check("tool")  # consume burst
+        limiter.reset()
+        assert len(limiter._tool_buckets) == 0
+
+        fss_session_id.set("")
+
+
+class TestEvictStale:
+    """Tests for RateLimiter._evict_stale bucket cleanup."""
+
+    def test_fully_recharged_bucket_is_evicted(self) -> None:
+        import time
+
+        from mcp_chassis.utils.fss_context import fss_session_id
+
+        # burst_size=1, per_tool_rpm=60 → refill_rate=1 token/s
+        # A bucket with capacity=1 and refill_rate=1 is stale after 1 second
+        config = RateLimitConfig(enabled=True, global_rpm=600, per_tool_rpm=60, burst_size=1)
+        limiter = RateLimiter(config)
+        assert limiter._global_bucket is not None
+        limiter._global_bucket.tokens = 100.0
+        limiter._global_bucket.capacity = 100.0
+
+        # Create a bucket for session-old
+        fss_session_id.set("session-old")
+        limiter.check("tool")  # creates ("session-old", "tool") bucket
+
+        # Fake it being fully recharged long ago
+        old_bucket = limiter._tool_buckets[("session-old", "tool")]
+        old_bucket.last_refill = time.monotonic() - 100.0  # 100s ago
+
+        # Creating a new bucket triggers eviction
+        fss_session_id.set("session-new")
+        limiter.check("tool")  # creates ("session-new", "tool"), evicts stale
+
+        assert ("session-old", "tool") not in limiter._tool_buckets
+        assert ("session-new", "tool") in limiter._tool_buckets
+
+        fss_session_id.set("")
+
+    def test_recently_used_bucket_not_evicted(self) -> None:
+        from mcp_chassis.utils.fss_context import fss_session_id
+
+        config = RateLimitConfig(enabled=True, global_rpm=600, per_tool_rpm=60, burst_size=2)
+        limiter = RateLimiter(config)
+        assert limiter._global_bucket is not None
+        limiter._global_bucket.tokens = 100.0
+        limiter._global_bucket.capacity = 100.0
+
+        fss_session_id.set("session-active")
+        limiter.check("tool")  # creates bucket, last_refill = now
+
+        fss_session_id.set("session-trigger")
+        limiter.check("tool")  # triggers eviction check
+
+        # session-active's bucket is recent — must not be evicted
+        assert ("session-active", "tool") in limiter._tool_buckets
+
+        fss_session_id.set("")

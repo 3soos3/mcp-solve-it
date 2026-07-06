@@ -458,3 +458,155 @@ class TestVectorCAI:
                 f"Vector {v['id']} ({v['description']}): "
                 f"got {got!r}, want {v['cai']!r}"
             )
+
+
+class TestValidateCAI:
+    """Tests for validate_cai() format checker."""
+
+    def test_valid_sha2_256(self) -> None:
+        from mcp_chassis.utils.integrity import compute_json_cai, validate_cai
+
+        cai = compute_json_cai({"x": 1})
+        assert validate_cai(cai) is True
+
+    def test_valid_sha2_384(self) -> None:
+        from mcp_chassis.utils.integrity import compute_cai, validate_cai
+
+        cai = compute_cai(b"data", algorithm="sha2-384")
+        assert validate_cai(cai, algorithm="sha2-384") is True
+
+    def test_valid_sha2_512(self) -> None:
+        from mcp_chassis.utils.integrity import compute_cai, validate_cai
+
+        cai = compute_cai(b"data", algorithm="sha2-512")
+        assert validate_cai(cai, algorithm="sha2-512") is True
+
+    def test_wrong_algorithm_prefix_rejected(self) -> None:
+        from mcp_chassis.utils.integrity import compute_cai, validate_cai
+
+        cai = compute_cai(b"data", algorithm="sha2-256")
+        # Valid sha2-256 CAI but wrong algorithm arg
+        assert validate_cai(cai, algorithm="sha2-384") is False
+
+    def test_unknown_algorithm_returns_false(self) -> None:
+        from mcp_chassis.utils.integrity import validate_cai
+
+        assert validate_cai("sha3-256:abc", algorithm="sha3-256") is False
+
+    def test_missing_colon_returns_false(self) -> None:
+        from mcp_chassis.utils.integrity import validate_cai
+
+        assert validate_cai("sha2-256" + "a" * 64) is False
+
+    def test_uppercase_hex_returns_false(self) -> None:
+        from mcp_chassis.utils.integrity import validate_cai
+
+        assert validate_cai("sha2-256:" + "A" * 64) is False
+
+    def test_wrong_hex_length_returns_false(self) -> None:
+        from mcp_chassis.utils.integrity import validate_cai
+
+        assert validate_cai("sha2-256:" + "a" * 32) is False
+
+    def test_empty_string_returns_false(self) -> None:
+        from mcp_chassis.utils.integrity import validate_cai
+
+        assert validate_cai("") is False
+
+
+class TestBuildJWKS:
+    """Tests for build_jwks() — JWKS document structure (FSS-0005 §6.5)."""
+
+    @pytest.fixture()
+    def ed25519_key(self) -> object:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        return Ed25519PrivateKey.generate()
+
+    def test_returns_keys_array(self, ed25519_key: object) -> None:
+        from mcp_chassis.utils.integrity import build_jwks
+
+        jwks = build_jwks(ed25519_key)
+        assert "keys" in jwks
+        assert len(jwks["keys"]) == 1
+
+    def test_key_type_and_curve(self, ed25519_key: object) -> None:
+        from mcp_chassis.utils.integrity import build_jwks
+
+        key_entry = build_jwks(ed25519_key)["keys"][0]
+        assert key_entry["kty"] == "OKP"
+        assert key_entry["crv"] == "Ed25519"
+        assert key_entry["use"] == "sig"
+
+    def test_kid_is_present_and_stable(self, ed25519_key: object) -> None:
+        from mcp_chassis.utils.integrity import build_jwks
+
+        jwks1 = build_jwks(ed25519_key)
+        jwks2 = build_jwks(ed25519_key)
+        kid1 = jwks1["keys"][0]["kid"]
+        kid2 = jwks2["keys"][0]["kid"]
+        assert kid1 == kid2
+        assert isinstance(kid1, str) and len(kid1) > 0
+
+    def test_x_is_base64url_encoded_public_key(self, ed25519_key: object) -> None:
+        import base64
+
+        from mcp_chassis.utils.integrity import build_jwks
+
+        key_entry = build_jwks(ed25519_key)["keys"][0]
+        x = key_entry["x"]
+        # Should be base64url without padding — decode should produce 32 bytes
+        raw = base64.urlsafe_b64decode(x + "==")
+        assert len(raw) == 32
+
+    def test_revocation_fields_default_to_not_revoked(
+        self, ed25519_key: object
+    ) -> None:
+        from mcp_chassis.utils.integrity import build_jwks
+
+        key_entry = build_jwks(ed25519_key)["keys"][0]
+        assert key_entry["revoked"] is False
+        assert key_entry["revoked_at"] is None
+        assert key_entry["revocation_reason"] is None
+
+
+class TestCheckJCSRequired:
+    """Tests for check_jcs_required() startup enforcement."""
+
+    def test_fss_metadata_false_no_exit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FSS_METADATA", "false")
+        from mcp_chassis.utils.integrity import check_jcs_required
+
+        check_jcs_required()  # should not raise
+
+    def test_fss_metadata_unset_no_exit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("FSS_METADATA", raising=False)
+        from mcp_chassis.utils.integrity import check_jcs_required
+
+        check_jcs_required()  # should not raise
+
+    def test_fss_metadata_true_jcs_available_no_exit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FSS_METADATA", "true")
+        monkeypatch.setattr(
+            "mcp_chassis.utils.integrity._JCS_AVAILABLE", True
+        )
+        from mcp_chassis.utils.integrity import check_jcs_required
+
+        check_jcs_required()  # should not raise
+
+    def test_fss_metadata_true_jcs_unavailable_exits(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FSS_METADATA", "true")
+        monkeypatch.setattr(
+            "mcp_chassis.utils.integrity._JCS_AVAILABLE", False
+        )
+        from mcp_chassis.utils.integrity import check_jcs_required
+
+        with pytest.raises(SystemExit) as exc_info:
+            check_jcs_required()
+        assert exc_info.value.code == 1
