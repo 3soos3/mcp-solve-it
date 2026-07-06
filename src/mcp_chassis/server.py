@@ -19,6 +19,8 @@ from mcp.server.lowlevel.server import request_ctx
 from mcp_chassis.config import ServerConfig
 from mcp_chassis.context import HandlerContext
 from mcp_chassis.errors import (
+    FSS_AUTH_DENIED,
+    FSS_AUTH_REQUIRED,
     FSS_EXECUTION_FAILED,
     FSS_EXECUTION_INTERRUPTED,
     FSS_INTERNAL_ERROR,
@@ -30,10 +32,14 @@ from mcp_chassis.errors import (
 )
 from mcp_chassis.middleware.pipeline import MiddlewarePipeline
 from mcp_chassis.utils.fss_context import (
-    fss_agent_identity,
     fss_analyst_identity,
     fss_client_identity,
+    fss_fit_token,
     fss_investigation_id,
+    fss_invocation_type,
+    fss_llm_model,
+    fss_llm_provider,
+    fss_mcp_client,
     fss_parameters_cai,
     fss_result_cai,
     fss_result_status,
@@ -517,6 +523,9 @@ class ChassisServer:
         transaction_id: str | None = None,
     ) -> types.CallToolResult:
         """Inner dispatch — FSS lifecycle, middleware, handler invocation."""
+        import time as _time
+        _t0 = _time.monotonic()
+
         # ── 1. Initialise FSS transaction context ─────────────────────
         tokens: list[Any] = []  # noqa: F841  kept for compatibility; context cleared in finally
         if transaction_id is None:
@@ -535,9 +544,10 @@ class ChassisServer:
         )
 
         def _fss_error(code: str, message: str, *, partial: bool = False) -> types.CallToolResult:
-            """Build an FSS error response with provenance block.
+            """Build an FSS error response with _provenance at the result level.
 
             Does NOT reset FSS context — the caller's finally block handles that.
+            _provenance is a direct field on CallToolResult (FSS-0004 §3.1).
             """
             fss_result_status.set("error")
             err = FSSError(
@@ -546,6 +556,7 @@ class ChassisServer:
                 transaction_id=transaction_id,
                 partial_result=partial,
             )
+            provenance: dict[str, Any] | None = None
             try:
                 provenance = build_provenance_record(
                     tool_name=tool_name,
@@ -553,13 +564,40 @@ class ChassisServer:
                     kb_version_id=getattr(self, "_kb_version_id", None),
                     kb_version=getattr(self, "_kb_version", None),
                 )
-                payload = {**err.to_dict(), "_provenance": provenance}
+                # Merge error fields into provenance so the client can read them
+                # from _provenance.error_code, .error_message, .partial_result, .correlation_id
+                provenance["error_code"] = code
+                provenance["error_message"] = message
+                provenance["partial_result"] = partial
+                provenance["correlation_id"] = transaction_id
             except Exception:
-                payload = err.to_dict()
-            return types.CallToolResult(
-                content=[types.TextContent(type="text", text=json.dumps(payload))],
-                isError=True,
-            )
+                pass
+            result_data: dict[str, Any] = {
+                "content": [{"type": "text", "text": json.dumps(err.to_dict())}],
+                "isError": True,
+            }
+            if provenance is not None:
+                result_data["_provenance"] = provenance
+            try:
+                from mcp_chassis.utils.observer import emit as _obs
+                _obs("tool_call",
+                     transaction_id=transaction_id,
+                     tool_name=tool_name,
+                     tool_version=self._tools.get(tool_name, {}).get("tool_version", "0.0.0"),
+                     duration_ms=round((_time.monotonic() - _t0) * 1000, 1),
+                     success=False,
+                     error_code=code,
+                     error_message=message,
+                     parameters_cai=fss_parameters_cai.get(),
+                     result_cai=None,
+                     investigation_id=fss_investigation_id.get(),
+                     client_identity=fss_client_identity.get(),
+                     fit_jti=None,
+                     arguments=arguments,
+                     result_text="")
+            except Exception:
+                pass
+            return types.CallToolResult.model_validate(result_data)
 
         # ── 2. Tool existence check ────────────────────────────────────
         if tool_name not in self._tools:
@@ -573,7 +611,91 @@ class ChassisServer:
         required_scopes: list[str] = tool_info.get("auth_scopes", [])
         tool_version: str = tool_info.get("tool_version", "0.0.0")
 
-        # ── 3. Compute parameters_cai (FSS-0005 §3.2) ─────────────────
+        # ── 3a. Read FSS context from MCP request_ctx ─────────────────────
+        # request_ctx is set by the SDK in the same async context as our
+        # handler, so all reads here work reliably without context-var
+        # propagation issues.
+        try:
+            sdk_ctx = request_ctx.get()
+            # mcp_client from session clientInfo (captured at initialize)
+            client_params = sdk_ctx.session.client_params
+            if client_params is not None:
+                ci = client_params.clientInfo
+                fss_mcp_client.set(f"{ci.name}/{ci.version}")
+            # X-Request-Timestamp for replay prevention (FSS-0003 §7.3).
+            # request_ctx.request IS the Starlette Request object in HTTP
+            # transport (set by StreamableHTTPSessionManager).
+            http_req = sdk_ctx.request
+            if http_req is not None and hasattr(http_req, "headers"):
+                ts = http_req.headers.get("x-request-timestamp")
+                if ts:
+                    from mcp_chassis.utils.fss_context import fss_request_timestamp
+
+                    fss_request_timestamp.set(ts)
+                inv_id = http_req.headers.get("x-investigation-id", "")
+                if inv_id:
+                    fss_investigation_id.set(inv_id)
+                fit_tok = http_req.headers.get("x-fit-token", "")
+                if fit_tok:
+                    fss_fit_token.set(fit_tok)
+            # FSS investigation context from params._meta._fss
+            if sdk_ctx.meta is not None:
+                _fss_block: dict[str, Any] = {}
+                if sdk_ctx.meta.model_extra:
+                    _fss_block = sdk_ctx.meta.model_extra.get("_fss") or {}
+                if isinstance(_fss_block, dict):
+                    _allowed_fss = {
+                        "investigation_id", "analyst_identity",
+                        "llm_model", "llm_provider",
+                    }
+                    for _k, _v in _fss_block.items():
+                        if _k not in _allowed_fss:
+                            continue
+                        if not isinstance(_v, str) or len(_v) > 256:
+                            continue
+                        if _k == "investigation_id":
+                            fss_investigation_id.set(_v)
+                        elif _k == "analyst_identity":
+                            fss_analyst_identity.set(_v)
+                        elif _k == "llm_model":
+                            fss_llm_model.set(_v)
+                        elif _k == "llm_provider":
+                            fss_llm_provider.set(_v)
+        except Exception:
+            pass
+
+        # ── 3b. Strip _meta from arguments before parameters_cai ──────
+        # Some clients embed FSS context in arguments._meta as a fallback.
+        # Strip it before hashing so the CAI covers only tool parameters.
+        # Values from arguments._meta supplement (but do not override) those
+        # already set from params._meta._fss above.
+        if "_meta" in arguments:
+            raw_meta = arguments.pop("_meta", {}) or {}
+            if isinstance(raw_meta, dict):
+                _allowed_args_meta = {
+                    "investigation_id", "analyst_identity",
+                    "llm_model", "llm_provider",
+                }
+                for _k, _v in raw_meta.items():
+                    if _k == "invocation_type":
+                        logger.debug("_meta.invocation_type ignored (server-declared field)")
+                        continue
+                    if _k not in _allowed_args_meta:
+                        logger.debug("_meta key '%s' not in allowlist — ignored", _k)
+                        continue
+                    if not isinstance(_v, str) or len(_v) > 256:
+                        continue
+                    # Only set if not already provided via params._meta._fss
+                    _fallback_map = {
+                        "investigation_id": fss_investigation_id,
+                        "analyst_identity": fss_analyst_identity,
+                        "llm_model": fss_llm_model,
+                        "llm_provider": fss_llm_provider,
+                    }
+                    if _k in _fallback_map and _fallback_map[_k].get() is None:
+                        _fallback_map[_k].set(_v)
+
+        # ── 3c. Compute parameters_cai (FSS-0005 §3.2) ────────────────
         try:
             from mcp_chassis.utils.metrics import get_metrics as _gm
 
@@ -613,13 +735,18 @@ class ChassisServer:
             # Map chassis error codes to FSS taxonomy and record OTel block
             code = middleware_result.error_code
             if "AUTH" in code:
-                fss_code = "FSS_AUTH_REQUIRED"
+                if "authentication required" in middleware_result.error_message.lower():
+                    fss_code = FSS_AUTH_REQUIRED
+                else:
+                    fss_code = FSS_AUTH_DENIED
                 _block_stage = "auth"
             elif "RATE_LIMIT" in code:
                 fss_code = FSS_EXECUTION_INTERRUPTED
                 _block_stage = "rate_limit"
             elif "REPLAY" in code:
-                fss_code = FSS_PARAM_INVALID
+                from mcp_chassis.errors import FSS_REPLAY_REJECTED
+
+                fss_code = FSS_REPLAY_REJECTED
                 _block_stage = "replay"
             elif "IO_LIMIT" in code or "SIZE" in code:
                 fss_code = FSS_PARAM_INVALID
@@ -659,7 +786,7 @@ class ChassisServer:
             logger.error("Tool '%s' raised unhandled error: %s", tool_name, exc)
             return _fss_error(FSS_INTERNAL_ERROR, "Internal server error")
 
-        # ── 6. Compute result_cai and embed provenance ─────────────────
+        # ── 6. Compute result_cai and build provenance ─────────────────
         try:
             if isinstance(result, str):
                 try:
@@ -669,9 +796,14 @@ class ChassisServer:
             else:
                 result_obj = result
 
-            result_cai_val = compute_json_cai(
-                result_obj if isinstance(result_obj, (dict, list)) else {"_value": result_obj}
-            )
+            # Build response_text first — result_cai must hash the content array
+            # exactly as the MCP response carries it (FSS-0005 §3.2).
+            if isinstance(result_obj, dict):
+                response_text = json.dumps(result_obj)
+            else:
+                response_text = json.dumps({"result": result_obj})
+
+            result_cai_val = compute_json_cai([{"type": "text", "text": response_text}])
             fss_result_cai.set(result_cai_val)
             fss_result_status.set("success")
 
@@ -682,11 +814,7 @@ class ChassisServer:
                 kb_version=getattr(self, "_kb_version", None),
             )
 
-            if isinstance(result_obj, dict):
-                result_obj["_provenance"] = provenance
-                response_text = json.dumps(result_obj)
-            else:
-                response_text = json.dumps({"result": result_obj, "_provenance": provenance})
+            # _provenance is at the MCP result level (FSS-0010 §3.2)
 
             self._middleware.check_response_size(response_text)
 
@@ -701,26 +829,51 @@ class ChassisServer:
 
         except ChassisError as exc:
             logger.error("Response check failed for '%s': %s", tool_name, exc)
-            return _fss_error(FSS_INTERNAL_ERROR, "Response processing error")
+            _detail = str(exc.args[0]) if exc.args else "Response processing error"
+            msg = _detail if self._config.security.detailed_errors else "Response processing error"
+            return _fss_error(FSS_INTERNAL_ERROR, msg)
         except (TypeError, ValueError) as exc:
             logger.error("Tool '%s' returned non-serializable result: %s", tool_name, exc)
             return _fss_error(FSS_INTERNAL_ERROR, "Tool result could not be serialized")
         finally:
-            # Explicitly reset all FSS context vars to avoid bleeding into
-            # the next sequential request on the same asyncio task
+            # Reset all FSS context vars to prevent bleeding into the next request
             fss_transaction_id.set(None)
             fss_parameters_cai.set(None)
             fss_result_cai.set(None)
             fss_result_status.set(None)
             fss_investigation_id.set(None)
             fss_analyst_identity.set(None)
-            fss_agent_identity.set(None)
             fss_client_identity.set(None)
+            fss_llm_model.set(None)
+            fss_llm_provider.set(None)
+            fss_mcp_client.set(None)
+            fss_invocation_type.set(None)
 
-        return types.CallToolResult(
-            content=[types.TextContent(type="text", text=response_text)],
-            isError=False,
-        )
+        try:
+            from mcp_chassis.utils.observer import emit as _obs
+            _obs("tool_call",
+                 transaction_id=transaction_id,
+                 tool_name=tool_name,
+                 tool_version=tool_version,
+                 duration_ms=round((_time.monotonic() - _t0) * 1000, 1),
+                 success=True,
+                 error_code="",
+                 error_message="",
+                 parameters_cai=provenance.get("parameters_cai"),
+                 result_cai=provenance.get("result_cai"),
+                 investigation_id=provenance.get("investigation_id"),
+                 client_identity=provenance.get("client_identity"),
+                 fit_jti=provenance.get("fit_jti"),
+                 arguments=sanitized_args,
+                 result_text=response_text[:2000])
+        except Exception:
+            pass
+
+        return types.CallToolResult.model_validate({
+            "content": [{"type": "text", "text": response_text}],
+            "isError": False,
+            "_provenance": provenance,
+        })
 
     def _make_middleware_mcp_error(self, middleware_result: Any) -> Exception:
         """Build an McpError from a failed MiddlewareResult, respecting detailed_errors.
