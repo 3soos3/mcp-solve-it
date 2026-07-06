@@ -474,13 +474,15 @@ class ChassisServer:
         from mcp_chassis.utils.telemetry import get_telemetry
 
         _metrics_start = get_metrics().record_call_start(tool_name)
-        _span = get_telemetry().start_span(
-            "mcp.tool.call",
-            **{"tool.name": tool_name},
-        )
+        # Generate transaction_id here so it's available for the span after
+        # _dispatch_tool_inner's finally block resets fss_transaction_id.
+        _transaction_id = str(uuid.uuid4())
 
-        with _span:
-            result = await self._dispatch_tool_inner(tool_name, arguments)
+        # Use `with ... as _span` so set_attribute is called on the real Span
+        # object (not the context manager).  _NoOpSpan.__enter__ returns self,
+        # and start_as_current_span.__enter__ returns the Span — both work.
+        with get_telemetry().start_span("mcp.tool.call") as _span:
+            result = await self._dispatch_tool_inner(tool_name, arguments, _transaction_id)
 
             # Extract FSS error code from the response payload when present
             _fss_code = ""
@@ -493,11 +495,9 @@ class ChassisServer:
                     _fss_code = "FSS_UNKNOWN"
 
             try:
+                _span.set_attribute("tool.name", tool_name)
                 _span.set_attribute("fss.error_code", _fss_code or "none")
-                _span.set_attribute(
-                    "fss.transaction_id",
-                    str(fss_transaction_id.get() or ""),
-                )
+                _span.set_attribute("fss.transaction_id", _transaction_id)
                 _span.set_attribute("kb.version", str(getattr(self, "_kb_version", "") or ""))
             except Exception:
                 pass
@@ -514,11 +514,13 @@ class ChassisServer:
         self,
         tool_name: str,
         arguments: dict[str, Any],
+        transaction_id: str | None = None,
     ) -> types.CallToolResult:
         """Inner dispatch — FSS lifecycle, middleware, handler invocation."""
         # ── 1. Initialise FSS transaction context ─────────────────────
         tokens: list[Any] = []  # noqa: F841  kept for compatibility; context cleared in finally
-        transaction_id = str(uuid.uuid4())
+        if transaction_id is None:
+            transaction_id = str(uuid.uuid4())
         fss_transaction_id.set(transaction_id)
         fss_result_status.set("error")  # pessimistic default
 

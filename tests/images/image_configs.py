@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 _KB_PATH = os.environ.get("SOLVE_IT_DATA_PATH", "")
 SOLVEIT_VOL = f"{_KB_PATH}:/tmp/app-cache/solve-it:ro,Z" if _KB_PATH else ""
-FAST_FAIL = "SOLVE_IT_DATA_URL=http://0.0.0.0/fail"
+FAST_FAIL = "SOLVE_IT_LIVE_UPDATES=false"
 DEGRADED = "MCP_APP_INIT_REQUIRED=false"
 
 

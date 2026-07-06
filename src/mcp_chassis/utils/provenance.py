@@ -73,7 +73,7 @@ def build_provenance_record(
         "agent_identity": fss_agent_identity.get(),
     }
 
-    # Optional Ed25519 signature (FSS-0005 §6, required for Level 3)
+    # Ed25519 signature (FSS-0005 §6) — includes kid for key rotation
     try:
         from mcp_chassis.utils.integrity import load_signing_key, sign_provenance
 

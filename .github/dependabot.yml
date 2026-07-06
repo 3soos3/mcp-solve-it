@@ -1,19 +1,25 @@
-# Dependabot configuration for automated dependency updates
-# Runs weekly to keep dependencies secure and up-to-date
+# Dependabot configuration for dependency updates.
+#
+# Routine version bumps: one grouped PR per ecosystem on the 25th of each month
+# (merge before the 1st so :monthly build captures the updated deps).
+# Security alerts: opened immediately by GitHub when a CVE is detected —
+# merge within 24-48h for CRITICAL/HIGH, at your convenience for lower severity.
+#
+# No auto-merge: all PRs require manual review and approval.
 
 version: 2
 updates:
-  # Python (pip) dependencies — all updates in one PR, auto-merged when gate passes
+  # Python (pip) dependencies — all updates grouped into one PR per month
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "monthly"
+      day: "25"
       time: "03:00"
     open-pull-requests-limit: 1
     labels:
       - "dependencies"
       - "python"
-      - "automerge"
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
@@ -26,17 +32,17 @@ updates:
           - "minor"
           - "major"
 
-  # GitHub Actions dependencies — all updates in one PR, auto-merged when gate passes
+  # GitHub Actions dependencies — all updates grouped into one PR per month
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+      day: "25"
       time: "03:00"
     open-pull-requests-limit: 1
     labels:
       - "dependencies"
       - "github-actions"
-      - "automerge"
     commit-message:
       prefix: "chore(deps)"
       include: "scope"

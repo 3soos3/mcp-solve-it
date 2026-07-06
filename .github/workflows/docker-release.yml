@@ -1,9 +1,9 @@
 name: Docker - Build & Publish :release
 
 # Builds signed release images with compound tag v{mcp}-si{solveit}.
-# Two triggers:
-#   1. Git tag push (v*.*.*) — new MCP release, pair with latest SOLVE-IT release
-#   2. Daily schedule — detect new SOLVE-IT releases, rebuild with current MCP
+# Triggered only by new SOLVE-IT releases (daily check) or manual dispatch.
+# Always pairs the latest MCP git tag with the latest SOLVE-IT release tag —
+# :release only moves when the forensic data changes, not on every MCP commit.
 #
 # Tags: v{mcp}-si{solveit} on GHCR + Docker Hub.  :latest also updated.
 # Post-publish: Trivy scan (all arches), Cosign sign, SBOM (forever), SLSA.
@@ -14,8 +14,6 @@ name: Docker - Build & Publish :release
 # Zenodo :release deposit: active when ZENODO_RELEASES_CONCEPT var is set.
 
 on:
-  push:
-    tags: ['v*.*.*']
   schedule:
     - cron: '0 4 * * *'   # Daily 04:00 UTC — detect new SOLVE-IT releases
   workflow_dispatch:
@@ -32,7 +30,7 @@ on:
         default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}
   cancel-in-progress: false
 
 env:
@@ -60,15 +58,18 @@ jobs:
       - name: Resolve MCP version
         id: mcp
         run: |
-          MCP_SHA=$(git rev-parse --short HEAD)
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            MCP_VERSION="${GITHUB_REF#refs/tags/}"
-          else
-            MCP_VERSION=$(grep '^version' pyproject.toml | head -1 \
-              | sed 's/version = "\(.*\)"/\1/')
+          # Always use the latest v*.*.* release tag — not HEAD, not pyproject.toml.
+          # :release only pairs stable MCP releases with stable SOLVE-IT releases.
+          MCP_VERSION=$(git tag --sort=-version:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          if [ -z "$MCP_VERSION" ]; then
+            echo "::error::No v*.*.* tag found — create a release tag first"
+            exit 1
           fi
-          echo "mcp_sha=${MCP_SHA}"       >> $GITHUB_OUTPUT
+          MCP_SHA=$(git rev-parse --short "${MCP_VERSION}")
+          echo "mcp_sha=${MCP_SHA}"         >> $GITHUB_OUTPUT
           echo "mcp_version=${MCP_VERSION}" >> $GITHUB_OUTPUT
+          echo "::notice::MCP release: ${MCP_VERSION} (${MCP_SHA})"
 
       - name: Resolve latest SOLVE-IT release
         id: solveit
@@ -433,7 +434,7 @@ jobs:
           git archive HEAD --format=zip -o "source-${TAG}.zip"
 
       - name: Download SBOMs from sign job
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: sbom-${{ needs.check.outputs.image_tag }}-${{ github.run_id }}
 
