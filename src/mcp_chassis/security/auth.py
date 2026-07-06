@@ -240,13 +240,12 @@ class ApiKeyProvider(AuthProvider):
 
         from mcp_chassis.logging_config import log_security_event
 
-        auth_header: str = request_context.get("authorization_header", "")
-        if not auth_header:
+        raw_key: str = request_context.get("token", "")
+        if not raw_key:
             log_security_event("auth_failure", error_detail="Missing Bearer token")
             return AuthResult.failure("Authentication required: no Bearer token")
 
-        has_bearer = auth_header.startswith("Bearer ")
-        raw_key = auth_header[7:].strip() if has_bearer else auth_header.strip()
+        raw_key = raw_key.strip()
         if len(raw_key) < 32:
             log_security_event("auth_failure", error_detail="Key too short")
             return AuthResult.failure("Authentication failed: key too short")
@@ -307,13 +306,10 @@ class OAuthJWTProvider(AuthProvider):
     async def authenticate(self, request_context: dict[str, Any]) -> AuthResult:
         from mcp_chassis.logging_config import log_security_event
 
-        auth_header: str = request_context.get("authorization_header", "")
-        if not auth_header:
+        token: str = request_context.get("token", "")
+        if not token:
             log_security_event("auth_failure", error_detail="Missing Bearer JWT")
             return AuthResult.failure("Authentication required: no Bearer token")
-
-        has_bearer = auth_header.startswith("Bearer ")
-        token = auth_header[7:].strip() if has_bearer else auth_header.strip()
 
         try:
             import jwt as pyjwt

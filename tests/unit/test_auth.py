@@ -222,7 +222,7 @@ class TestApiKeyProvider:
         raw_key = "a" * 32  # 32 bytes entropy minimum
         path = self._make_key_store(tmp_path, {raw_key: "analyst-1"})
         provider = ApiKeyProvider(keys_path=path)
-        result = await provider.authenticate({"authorization_header": f"Bearer {raw_key}"})
+        result = await provider.authenticate({"token": raw_key})
         assert result.authenticated
         assert result.identity is not None
         assert result.identity.id == "analyst-1"
@@ -234,7 +234,7 @@ class TestApiKeyProvider:
         raw_key = "a" * 32
         path = self._make_key_store(tmp_path, {raw_key: "analyst-1"})
         provider = ApiKeyProvider(keys_path=path)
-        result = await provider.authenticate({"authorization_header": raw_key})
+        result = await provider.authenticate({"token": raw_key})
         assert result.authenticated
         assert result.identity is not None
         assert result.identity.id == "analyst-1"
@@ -246,7 +246,7 @@ class TestApiKeyProvider:
         raw_key = "a" * 32
         path = self._make_key_store(tmp_path, {raw_key: "analyst-1"})
         provider = ApiKeyProvider(keys_path=path)
-        result = await provider.authenticate({"authorization_header": "Bearer " + "b" * 32})
+        result = await provider.authenticate({"token": "b" * 32})
         assert not result.authenticated
 
     @pytest.mark.asyncio
@@ -265,7 +265,7 @@ class TestApiKeyProvider:
 
         path = self._make_key_store(tmp_path, {"short": "analyst-1"})
         provider = ApiKeyProvider(keys_path=path)
-        result = await provider.authenticate({"authorization_header": "Bearer short"})
+        result = await provider.authenticate({"token": "short"})
         assert not result.authenticated
         assert "too short" in result.reason
 
@@ -275,7 +275,7 @@ class TestApiKeyProvider:
 
         path = self._make_key_store(tmp_path, {})
         provider = ApiKeyProvider(keys_path=path)
-        result = await provider.authenticate({"authorization_header": "Bearer " + "a" * 32})
+        result = await provider.authenticate({"token": "a" * 32})
         assert not result.authenticated
 
     @pytest.mark.asyncio

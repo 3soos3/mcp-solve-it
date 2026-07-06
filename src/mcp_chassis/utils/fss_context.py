@@ -33,20 +33,36 @@ fss_result_status: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "fss_result_status", default=None
 )
 
-# Investigation context — sourced from HTTP headers or None for stdio
+# Investigation context — sourced from _meta in tool arguments or HTTP headers
 fss_investigation_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "fss_investigation_id", default=None
 )
 fss_analyst_identity: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "fss_analyst_identity", default=None
 )
-fss_agent_identity: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "fss_agent_identity", default=None
-)
 
 # Authenticated client identity — set by auth middleware (FSS-0002 §7.1)
 fss_client_identity: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "fss_client_identity", default=None
+)
+
+# LLM context — sourced from _meta in tool arguments (per-call, unverified)
+fss_llm_model: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "fss_llm_model", default=None
+)
+fss_llm_provider: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "fss_llm_provider", default=None
+)
+
+# MCP client identity from initialize handshake clientInfo.name/version (FSS-0010 §3.3)
+fss_mcp_client: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "fss_mcp_client", default=None
+)
+
+# Invocation type — set from MCP_INVOCATION_TYPE env var at server startup
+# human_direct | agent_supervised | agent_autonomous (FSS-0002 §4.4)
+fss_invocation_type: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "fss_invocation_type", default=None
 )
 
 # Request timestamp from X-Request-Timestamp header (replay prevention, L2-01)
@@ -58,6 +74,33 @@ fss_request_timestamp: contextvars.ContextVar[str | None] = contextvars.ContextV
 # Consumed by the auth middleware via request_context["token"].
 fss_auth_token: contextvars.ContextVar[str] = contextvars.ContextVar("fss_auth_token", default="")
 
+# FIT (Forensic Investigation Token) context vars (FSS-0006 §8)
+fss_fit_token: contextvars.ContextVar[str] = contextvars.ContextVar("fss_fit_token", default="")
+fss_fit_jti: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "fss_fit_jti", default=None
+)
+fss_fit_issuer: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "fss_fit_issuer", default=None
+)
+fss_fit_valid_until: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "fss_fit_valid_until", default=None
+)
+fss_fit_aud: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "fss_fit_aud", default=None
+)
+fss_fit_legal_authority: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "fss_fit_legal_authority", default=None
+)
+fss_fit_purpose: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "fss_fit_purpose", default=None
+)
+fss_investigation_id_verified: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "fss_investigation_id_verified", default=False
+)
+fss_tool_authorization_verified: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "fss_tool_authorization_verified", default=False
+)
+
 # Internal: Token list for resetting all vars after each dispatch
 _ALL_VARS: tuple[contextvars.ContextVar[Any], ...] = (
     fss_transaction_id,
@@ -66,10 +109,22 @@ _ALL_VARS: tuple[contextvars.ContextVar[Any], ...] = (
     fss_result_status,
     fss_investigation_id,
     fss_analyst_identity,
-    fss_agent_identity,
     fss_client_identity,
+    fss_llm_model,
+    fss_llm_provider,
+    fss_mcp_client,
+    fss_invocation_type,
     fss_request_timestamp,
     fss_auth_token,
+    fss_fit_token,
+    fss_fit_jti,
+    fss_fit_issuer,
+    fss_fit_valid_until,
+    fss_fit_aud,
+    fss_fit_legal_authority,
+    fss_fit_purpose,
+    fss_investigation_id_verified,
+    fss_tool_authorization_verified,
 )
 
 
@@ -87,14 +142,26 @@ def reset_fss_context(tokens: list[contextvars.Token[Any]]) -> None:
 
 
 __all__ = [
-    "fss_agent_identity",
     "fss_analyst_identity",
     "fss_auth_token",
     "fss_client_identity",
+    "fss_fit_aud",
+    "fss_fit_issuer",
+    "fss_fit_jti",
+    "fss_fit_legal_authority",
+    "fss_fit_purpose",
+    "fss_fit_token",
+    "fss_fit_valid_until",
+    "fss_investigation_id_verified",
+    "fss_invocation_type",
     "fss_investigation_id",
+    "fss_llm_model",
+    "fss_llm_provider",
+    "fss_mcp_client",
     "fss_parameters_cai",
     "fss_result_cai",
     "fss_result_status",
+    "fss_tool_authorization_verified",
     "fss_transaction_id",
     "reset_fss_context",
 ]

@@ -30,6 +30,17 @@ from mcp_chassis.security.validation import ValidationLimits, raise_if_invalid
 
 logger = logging.getLogger(__name__)
 
+# Nonce cache for replay prevention (FSS-0003 §7.3).
+# Maps timestamp string → acceptance epoch (float). Asyncio is single-threaded
+# so no lock is needed. Entries are evicted in _evict_seen_timestamps.
+_seen_timestamps: dict[str, float] = {}
+
+
+def _evict_seen_timestamps(now_epoch: float, window_seconds: int) -> None:
+    cutoff = now_epoch - window_seconds * 2
+    for k in [k for k, v in _seen_timestamps.items() if v < cutoff]:
+        del _seen_timestamps[k]
+
 
 @dataclass
 class MiddlewareResult:
@@ -138,6 +149,9 @@ class MiddlewarePipeline:
             authorized = await self._auth_provider.authorize(result.identity, name, required_scopes)
             if not authorized:
                 raise AuthError(f"Authorization failed: lacks required scopes for '{name}'")
+            if result.identity.id != "local":
+                from mcp_chassis.utils.fss_context import fss_client_identity
+                fss_client_identity.set(result.identity.id)
         except AuthError as exc:
             logger.warning("Auth check failed for '%s'", name)
             try:
@@ -147,6 +161,75 @@ class MiddlewarePipeline:
             except Exception:
                 pass
             return MiddlewareResult.error(exc)
+        return None
+
+    async def _run_fit(self, tool_name: str) -> MiddlewareResult | None:
+        """Run FIT validation (FSS-0006 §8). Optional at L2, required at L5."""
+        import os
+
+        from mcp_chassis.utils.fss_context import (
+            fss_client_identity,
+            fss_fit_aud,
+            fss_fit_issuer,
+            fss_fit_jti,
+            fss_fit_legal_authority,
+            fss_fit_purpose,
+            fss_fit_token,
+            fss_fit_valid_until,
+            fss_investigation_id,
+            fss_investigation_id_verified,
+            fss_invocation_type,
+            fss_tool_authorization_verified,
+        )
+
+        fit_token = fss_fit_token.get()
+        investigation_id = fss_investigation_id.get()
+        fit_enforce = os.environ.get("FSS_FIT_ENFORCE", "false").lower() == "true"
+
+        # L5 enforcement: investigation_id present → FIT required
+        if fit_enforce and investigation_id and not fit_token:
+            err = AuthError(
+                "FIT required for investigation-scoped tool calls", code="FSS_AUTH_DENIED"
+            )
+            return MiddlewareResult.error(err)
+
+        if not fit_token:
+            return None  # No FIT presented — proceed without FIT validation
+
+        # Validate the FIT
+        from mcp_chassis.security.fit import FITVerificationError, verify_fit
+        client_identity = fss_client_identity.get()
+        invocation_type = fss_invocation_type.get() or "agent_supervised"
+        server_identity = os.environ.get("FSS_SERVER_IDENTITY", "")
+
+        try:
+            claims = await verify_fit(
+                token=fit_token,
+                tool_name=tool_name,
+                investigation_id=investigation_id,
+                client_identity=client_identity,
+                invocation_type=invocation_type,
+                server_identity=server_identity,
+            )
+        except FITVerificationError as exc:
+            logger.warning("FIT verification failed at step %d: %s", exc.step, exc)
+            try:
+                from mcp_chassis.logging_config import log_security_event
+                log_security_event("fit_verification_failed", error_detail=str(exc))
+            except Exception:
+                pass
+            err = AuthError(str(exc), code="FSS_AUTH_DENIED")
+            return MiddlewareResult.error(err)
+
+        # Store FIT claims in context vars
+        fss_fit_jti.set(claims.jti)
+        fss_fit_issuer.set(claims.issuer)
+        fss_fit_valid_until.set(claims.valid_until)
+        fss_fit_aud.set(claims.aud)
+        fss_fit_legal_authority.set(claims.legal_authority)
+        fss_fit_purpose.set(claims.purpose)
+        fss_investigation_id_verified.set(bool(claims.investigation_id))
+        fss_tool_authorization_verified.set(bool(claims.authorized_tools))
         return None
 
     def _run_rate_limit(self, name: str) -> MiddlewareResult | None:
@@ -170,14 +253,16 @@ class MiddlewarePipeline:
     def _check_replay(self) -> MiddlewareResult | None:
         """Check X-Request-Timestamp against replay window (FSS-0003 §7.3).
 
-        Only active for HTTP transport (where the header is available).
-        Stdio requests always pass.
+        Rejects requests whose timestamp is outside the configured window OR
+        whose timestamp was already seen (nonce deduplication). Only active
+        for HTTP transport (where the header is available). Stdio passes.
 
         Returns:
-            MiddlewareResult.error if outside window, None if allowed.
+            MiddlewareResult.error if rejected, None if allowed.
         """
         import datetime
 
+        from mcp_chassis.errors import FSS_REPLAY_REJECTED
         from mcp_chassis.utils.fss_context import fss_request_timestamp
 
         if self._config.replay_window_seconds <= 0:
@@ -187,6 +272,7 @@ class MiddlewarePipeline:
         if not timestamp_str:
             return None  # No header present — stdio or client didn't send it
 
+        reason: str | None = None
         try:
             request_time = datetime.datetime.fromisoformat(timestamp_str)
             if request_time.tzinfo is None:
@@ -194,29 +280,37 @@ class MiddlewarePipeline:
             now = datetime.datetime.now(datetime.UTC)
             delta = abs((now - request_time).total_seconds())
             if delta > self._config.replay_window_seconds:
-                raise RateLimitError(
+                reason = (
                     f"Request timestamp outside replay window "
-                    f"({delta:.0f}s > {self._config.replay_window_seconds}s)",
-                    code="REPLAY_REJECTED",
+                    f"({delta:.0f}s > {self._config.replay_window_seconds}s)"
                 )
-        except (RateLimitError, IOLimitError, AuthError, ValidationError, SanitizationError) as exc:
-            from mcp_chassis.logging_config import log_security_event
-
-            log_security_event(
-                "replay_rejected",
-                error_detail=str(exc.args[0]) if exc.args else str(exc),
-            )
-            try:
-                from mcp_chassis.utils.metrics import get_metrics
-
-                get_metrics().record_replay_rejection()
-            except Exception:
-                pass
-            return MiddlewareResult.error(exc)
+            elif timestamp_str in _seen_timestamps:
+                reason = f"Duplicate X-Request-Timestamp — replay detected ({timestamp_str!r})"
+            else:
+                # Accept: record timestamp in nonce cache and evict old entries
+                _seen_timestamps[timestamp_str] = now.timestamp()
+                _evict_seen_timestamps(now.timestamp(), self._config.replay_window_seconds)
         except (ValueError, TypeError) as exc:
             logger.warning("Invalid X-Request-Timestamp '%s': %s", timestamp_str, exc)
+            return None
 
-        return None
+        if reason is None:
+            return None
+
+        err = RateLimitError(reason, code=FSS_REPLAY_REJECTED)
+        try:
+            from mcp_chassis.logging_config import log_security_event
+
+            log_security_event("replay_rejected", error_detail=reason)
+        except Exception:
+            pass
+        try:
+            from mcp_chassis.utils.metrics import get_metrics
+
+            get_metrics().record_replay_rejection()
+        except Exception:
+            pass
+        return MiddlewareResult.error(err)
 
     async def process_tool_request(
         self,
@@ -254,6 +348,10 @@ class MiddlewarePipeline:
 
         # Step 2: Auth check
         if err := await self._run_auth(tool_name, request_context, required_scopes or []):
+            return err
+
+        # Step 2.5: FIT validation (L5; RECOMMENDED at L2)
+        if err := await self._run_fit(tool_name):
             return err
 
         # Step 3: Rate limit check

@@ -542,7 +542,7 @@ class TestReplayPrevention:
         result = pipeline._check_replay()
         assert result is not None
         assert not result.allowed
-        assert result.error_code == "REPLAY_REJECTED"
+        assert result.error_code == "FSS_REPLAY_REJECTED"
         fss_request_timestamp.set(None)
 
     @pytest.mark.asyncio
@@ -594,5 +594,5 @@ class TestReplayPrevention:
             request_context={},
         )
         assert not result.allowed
-        assert result.error_code == "REPLAY_REJECTED"
+        assert result.error_code == "FSS_REPLAY_REJECTED"
         fss_request_timestamp.set(None)
