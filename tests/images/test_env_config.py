@@ -40,7 +40,7 @@ class TestSolveItMode:
         self, fixture_name: str, expected: str, request: pytest.FixtureRequest
     ) -> None:
         client: PodmanMCPClient = request.getfixturevalue(fixture_name)
-        assert client.get_env("FORENSIC_METADATA") == expected
+        assert client.get_env("FSS_METADATA") == expected
 
 
 class TestLiveEnv:

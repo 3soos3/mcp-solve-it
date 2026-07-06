@@ -2,7 +2,7 @@
 
 :live    — dynamic KB loaded from SOLVE_IT_DATA_URL at runtime
 :monthly — rolling snapshot baked in, kb_version == git SHA label
-:version — pinned release, exact counts, fully deterministic, FORENSIC_METADATA=true
+:version — pinned release, exact counts, fully deterministic, FSS_METADATA=true
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ class TestLiveMode:
         assert live.get_env("SOLVE_IT_MODE") == "live"
 
     def test_forensic_metadata_false(self, live: PodmanMCPClient) -> None:
-        assert live.get_env("FORENSIC_METADATA") == "false"
+        assert live.get_env("FSS_METADATA") == "false"
 
     def test_data_url_is_configured(self, live: PodmanMCPClient) -> None:
         url = live.get_env("SOLVE_IT_DATA_URL")
@@ -57,7 +57,7 @@ class TestMonthlyMode:
         assert monthly.get_env("SOLVE_IT_MODE") == "monthly"
 
     def test_forensic_metadata_false(self, monthly: PodmanMCPClient) -> None:
-        assert monthly.get_env("FORENSIC_METADATA") == "false"
+        assert monthly.get_env("FSS_METADATA") == "false"
 
     def test_version_env_is_set(self, monthly: PodmanMCPClient) -> None:
         svi = monthly.get_env("SOLVE_IT_VERSION")
@@ -103,7 +103,7 @@ class TestVersionMode:
         assert version.get_env("SOLVE_IT_MODE") == "release"
 
     def test_forensic_metadata_true(self, version: PodmanMCPClient) -> None:
-        assert version.get_env("FORENSIC_METADATA") == "true"
+        assert version.get_env("FSS_METADATA") == "true"
 
     def test_exact_version_string(self, version: PodmanMCPClient) -> None:
         cfg = BY_TAG["version"]
@@ -145,7 +145,7 @@ class TestVersionMode:
         data = version.call_tool("solveit_search", {"keywords": "triage"})
         status = version.prov(data).get("evidentiary_status")
         assert status == "evidentiary", (
-            f":version should be evidentiary (FORENSIC_METADATA=true), got {status!r}"
+            f":version should be evidentiary (FSS_METADATA=true), got {status!r}"
         )
 
     def test_artifact_id_equals_result_cai(self, version: PodmanMCPClient) -> None:

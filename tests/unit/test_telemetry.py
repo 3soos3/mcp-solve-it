@@ -155,7 +155,7 @@ class TestTelemetryManagerEnabled:
             "MCP_OTEL_ENVIRONMENT",
             "SOLVE_IT_VERSION",
             "SOLVE_IT_MODE",
-            "FORENSIC_METADATA",
+            "FSS_METADATA",
         ):
             monkeypatch.delenv(key, raising=False)
         import mcp_chassis
@@ -175,7 +175,7 @@ class TestTelemetryManagerEnabled:
         monkeypatch.setenv("MCP_OTEL_ENVIRONMENT", "staging")
         monkeypatch.setenv("SOLVE_IT_VERSION", "1.2.3")
         monkeypatch.setenv("SOLVE_IT_MODE", "bundle")
-        monkeypatch.setenv("FORENSIC_METADATA", "true")
+        monkeypatch.setenv("FSS_METADATA", "true")
         import mcp_chassis
         from mcp_chassis.utils.telemetry import TelemetryManager
 
@@ -186,7 +186,7 @@ class TestTelemetryManagerEnabled:
         assert attrs["service.version"] == mcp_chassis.__version__
         assert attrs["solve_it.mode"] == "bundle"
         assert attrs["solve_it.version"] == "1.2.3"
-        assert attrs["forensic_metadata"] == "true"
+        assert attrs["fss_metadata"] == "true"
 
     def test_otlp_exporters_use_default_endpoint(
         self, monkeypatch: pytest.MonkeyPatch, mock_otel: dict
@@ -451,7 +451,7 @@ class TestTelemetryManagerRealSDK:
         monkeypatch.setenv("MCP_OTEL_ENABLED", "true")
         monkeypatch.setenv("SOLVE_IT_VERSION", "1.2.3")
         monkeypatch.setenv("SOLVE_IT_MODE", "bundle")
-        monkeypatch.setenv("FORENSIC_METADATA", "true")
+        monkeypatch.setenv("FSS_METADATA", "true")
         import mcp_chassis
         from mcp_chassis.utils.telemetry import TelemetryManager
 
@@ -460,7 +460,7 @@ class TestTelemetryManagerRealSDK:
         assert attrs["service.version"] == mcp_chassis.__version__
         assert attrs["solve_it.mode"] == "bundle"
         assert attrs["solve_it.version"] == "1.2.3"
-        assert attrs["forensic_metadata"] == "true"
+        assert attrs["fss_metadata"] == "true"
 
     def test_start_span_produces_exportable_span(
         self, monkeypatch: pytest.MonkeyPatch, real_sdk_setup: dict

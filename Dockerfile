@@ -2,8 +2,8 @@
 # Unified Dockerfile for mcp-chassis (SOLVE-IT MCP Server) — Alpine Linux.
 #
 # SOLVE_IT_MODE controls the data strategy:
-#   release  (default) — bake specific SOLVE-IT release tag; FORENSIC_METADATA=true
-#   monthly            — bake SHA-pinned SOLVE-IT HEAD; FORENSIC_METADATA=false
+#   release  (default) — bake specific SOLVE-IT release tag; FSS_METADATA=true
+#   monthly            — bake SHA-pinned SOLVE-IT HEAD; FSS_METADATA=false
 #   live               — no data baked in; entrypoint fetches at startup
 #
 # Multi-architecture: linux/amd64, linux/arm64
@@ -64,7 +64,7 @@ RUN pip uninstall -y pip setuptools wheel 2>/dev/null || true && \
 FROM python:3.11-alpine AS runtime
 
 ARG SOLVE_IT_MODE=release
-ARG FORENSIC_METADATA=true
+ARG FSS_METADATA=true
 ARG BUILD_DATE
 ARG VCS_REF
 ARG VERSION=unknown
@@ -120,13 +120,13 @@ ENV PYTHONPATH=/app/src:/app/solve-it-main \
     LOG_LEVEL=INFO \
     TMPDIR=/tmp/app-tmp \
     SOLVE_IT_MODE=${SOLVE_IT_MODE} \
-    FORENSIC_METADATA=${FORENSIC_METADATA} \
+    FSS_METADATA=${FSS_METADATA} \
     SOLVE_IT_VERSION=${SOLVE_IT_VERSION} \
     MCP_APP_SOLVEIT_DATA_PATH=/app/solve-it-main \
-    SOLVE_IT_REPO=SOLVE-IT-DF/solve-it \
-    SOLVE_IT_BRANCH=main \
+    SOLVE_IT_LIVE_REPO=SOLVE-IT-DF/solve-it \
+    SOLVE_IT_LIVE_BRANCH=main \
     SOLVE_IT_LIVE_UPDATES=true \
-    SOLVE_IT_DATA_DIR=/tmp/app-cache/solve-it
+    SOLVE_IT_LIVE_DATA_DIR=/tmp/app-cache/solve-it
 
 EXPOSE 8000
 

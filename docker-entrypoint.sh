@@ -40,11 +40,11 @@ _download() {
 # ── live mode setup ────────────────────────────────────────────────────────────
 
 if [ "$SOLVE_IT_MODE" = "live" ]; then
-    DATA_DIR="${SOLVE_IT_DATA_DIR:-/tmp/app-cache/solve-it}"
+    DATA_DIR="${SOLVE_IT_LIVE_DATA_DIR:-/tmp/app-cache/solve-it}"
     BUNDLED_DIR="${MCP_APP_SOLVEIT_DATA_PATH:-/app/solve-it-main}"
     ARCHIVE_PATH="/tmp/app-tmp/solve-it.tar.gz"
-    REPO="${SOLVE_IT_REPO:-SOLVE-IT-DF/solve-it}"
-    BRANCH="${SOLVE_IT_BRANCH:-main}"
+    REPO="${SOLVE_IT_LIVE_REPO:-SOLVE-IT-DF/solve-it}"
+    BRANCH="${SOLVE_IT_LIVE_BRANCH:-main}"
     SHA_FILE="${DATA_DIR}/.sha"
 
     mkdir -p "$DATA_DIR" /tmp/app-tmp

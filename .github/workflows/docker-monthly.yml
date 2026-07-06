@@ -5,7 +5,7 @@ name: Docker - Build & Publish :monthly
 # Published as :monthly, :YYYY-MM, :sha-<mcp-sha> to GHCR.
 # Published as :monthly, :YYYY-MM to Docker Hub (last 12 :YYYY-MM retained).
 # Post-publish: Trivy scan (all arches), Cosign sign, SBOM, SLSA provenance.
-# FORENSIC_METADATA=false — use :<version> for evidentiary deployments.
+# FSS_METADATA=false — use :<version> for evidentiary deployments.
 #
 # Zenodo snapshot deposit: NOT YET IMPLEMENTED.
 # Manual setup required:
@@ -137,7 +137,7 @@ jobs:
             ${{ vars.DOCKERHUB_REPO != '' && format('{0}:{1}', env.DOCKERHUB_REPO, needs.check.outputs.month_tag) || '' }}
           build-args: |
             SOLVE_IT_MODE=monthly
-            FORENSIC_METADATA=false
+            FSS_METADATA=false
             SOLVE_IT_VERSION=${{ needs.check.outputs.solveit_version }}
             SOLVEIT_SHA=${{ needs.check.outputs.solveit_sha }}
             BUILD_DATE=${{ github.event.repository.updated_at }}

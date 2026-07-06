@@ -96,7 +96,7 @@ class TestKnownKBTools:
 
 
 class TestFSSSchemaAnnotations:
-    """FSS tool schema extensions — only verified on :version (FORENSIC_METADATA=true)."""
+    """FSS tool schema extensions — only verified on :version (FSS_METADATA=true)."""
 
     @pytest.fixture(scope="class")
     def version_tools(self, version: PodmanMCPClient) -> dict[str, dict]:

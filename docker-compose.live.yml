@@ -20,7 +20,7 @@ services:
       dockerfile: Dockerfile
       args:
         SOLVE_IT_MODE: live
-        FORENSIC_METADATA: "false"
+        FSS_METADATA: "false"
         VERSION: live
 
     environment:
@@ -35,7 +35,7 @@ services:
       SOLVE_IT_DATA_DIR: /tmp/app-cache/solve-it
 
       LOG_LEVEL: INFO
-      FORENSIC_METADATA: "false"
+      FSS_METADATA: "false"
 
     ports:
       - "8000:8000"

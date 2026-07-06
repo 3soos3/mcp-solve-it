@@ -63,7 +63,7 @@ class TelemetryManager:
                     "deployment.environment": environment,
                     "solve_it.mode": os.environ.get("SOLVE_IT_MODE", "unknown"),
                     "solve_it.version": os.environ.get("SOLVE_IT_VERSION", "unknown"),
-                    "forensic_metadata": os.environ.get("FORENSIC_METADATA", "false"),
+                    "fss_metadata": os.environ.get("FSS_METADATA", "false"),
                 }
             )
 
@@ -73,6 +73,10 @@ class TelemetryManager:
             )
             trace.set_tracer_provider(tracer_provider)
             self._tracer = trace.get_tracer(service_name)
+
+            from opentelemetry.propagate import set_global_textmap
+            from opentelemetry.propagators.tracecontext import TraceContextTextMapPropagator
+            set_global_textmap(TraceContextTextMapPropagator())
 
             metric_reader = PeriodicExportingMetricReader(
                 OTLPMetricExporter(endpoint=endpoint), export_interval_millis=60_000

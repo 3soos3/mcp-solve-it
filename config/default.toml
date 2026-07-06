@@ -16,9 +16,9 @@ profile = "moderate"
 # Overrides for baseline security level defaults.
 [security.rate_limits]
 enabled = true
-global_rpm = 120
-per_tool_rpm = 60
-burst_size = 10
+global_rpm = 600
+per_tool_rpm = 300
+burst_size = 50
 
 [security.io_limits]
 max_request_size = 5000000

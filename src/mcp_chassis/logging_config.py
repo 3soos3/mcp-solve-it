@@ -140,6 +140,15 @@ def log_security_event(
         json.dumps(record, ensure_ascii=False),
         extra={"correlation_id": transaction_id},
     )
+    try:
+        from mcp_chassis.utils.observer import emit as _obs
+        _obs("security",
+             event_type=event_type,
+             error_detail=error_detail,
+             tool_name=tool_name,
+             transaction_id=transaction_id)
+    except Exception:
+        pass
 
 
 def configure_logging(level: str = "INFO") -> None:

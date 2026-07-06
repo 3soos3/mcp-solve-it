@@ -26,7 +26,7 @@ class ImageConfig:
         tag:              Short label used as pytest ID ("live", "monthly", "version").
         image:            Default podman image name (overridable via CLI).
         mode:             Expected value of SOLVE_IT_MODE env var inside the container.
-        forensic:         Expected FORENSIC_METADATA value ("true" / "false").
+        forensic:         Expected FSS_METADATA value ("true" / "false").
         has_bundled_kb:   True when the KB is baked into the image (no volume needed).
         expected_version: Exact SOLVE_IT_VERSION string, or None for rolling builds.
         exact_counts:     Pinned KB counts (techniques/weaknesses/mitigations), or None.
