@@ -25,6 +25,7 @@ from mcp_chassis.errors import (
     FSS_EXECUTION_INTERRUPTED,
     FSS_INTERNAL_ERROR,
     FSS_PARAM_INVALID,
+    FSS_RATE_LIMITED,
     FSS_TOOL_UNAVAILABLE,
     ChassisError,
     ExtensionError,
@@ -741,7 +742,7 @@ class ChassisServer:
                     fss_code = FSS_AUTH_DENIED
                 _block_stage = "auth"
             elif "RATE_LIMIT" in code:
-                fss_code = FSS_EXECUTION_INTERRUPTED
+                fss_code = FSS_RATE_LIMITED
                 _block_stage = "rate_limit"
             elif "REPLAY" in code:
                 from mcp_chassis.errors import FSS_REPLAY_REJECTED
