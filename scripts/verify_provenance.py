@@ -111,7 +111,7 @@ def verify(provenance: dict, artifact_content: object = None,
         report("3", SKIP,
                f"Manual step: retrieve KB '{kb_version}' from Zenodo and recompute CAI.\n"
                f"      Expected: {kb_version_id}\n"
-               f"      Run: python -c \"from mcp_chassis.utils.integrity import "
+               f"      Run: python -c \"from fss_core.integrity import "
                f"compute_kb_version_id; print(compute_kb_version_id('<data_path>'))\"")
 
     # Step 4: Timestamp consistency

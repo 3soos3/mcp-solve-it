@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-# Unified Dockerfile for mcp-chassis (SOLVE-IT MCP Server) — Alpine Linux.
+# Unified Dockerfile for fss-mcp-solve-it (SOLVE-IT MCP Server) — Alpine Linux.
 #
 # SOLVE_IT_MODE controls the data strategy:
 #   release  (default) — bake specific SOLVE-IT release tag; FSS_METADATA=true
@@ -30,9 +30,15 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /build
 COPY pyproject.toml README.md ./
 
+# Install fss-core and fss-mcp from source (replaced by PyPI versions once published).
+# The solve-it runtime deps (pybtex etc.) are declared in pyproject.toml [dependencies]
+# but pip ignores [tool.uv.sources], so we install everything explicitly here.
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir ".[solveit,otel]"
+    pip install --no-cache-dir \
+        "fss-core @ git+https://github.com/3soos3/fss-chassis.git#subdirectory=packages/fss-core" \
+        "fss-mcp[http,auth,otel] @ git+https://github.com/3soos3/fss-chassis.git#subdirectory=packages/fss-mcp" \
+        pybtex xlsxwriter "rdflib>=7.0.0" pyyaml "pydantic>=2.0.0"
 
 # Clone SOLVE-IT data while git and pip are still available.
 # SHA checkout: reproducible (monthly/latest). Tag checkout: pinned release.

@@ -1,1 +1,1 @@
-"""Unit tests for mcp-chassis."""
+"""Unit tests for fss-mcp-solve-it."""

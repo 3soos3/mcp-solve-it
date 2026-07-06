@@ -8,16 +8,16 @@ SOLVE_IT_VERSION ?= v0.2026-06
 
 # ── Dev install ────────────────────────────────────────────────────────────────
 install:
-	pip install -e ".[dev]"
+	uv sync --extra dev
 
 # ── Unit / integration tests ───────────────────────────────────────────────────
 test: test-unit test-integration
 
 test-unit:
-	pytest tests/unit/ -v
+	uv run pytest tests/unit/ -v
 
 test-integration:
-	pytest tests/integration/ -v
+	uv run pytest tests/integration/ -v
 
 # ── Image build targets ────────────────────────────────────────────────────────
 build-live:
@@ -44,24 +44,22 @@ build-all: build-live build-monthly build-version
 
 # ── Image test targets ─────────────────────────────────────────────────────────
 test-images:
-	pytest tests/images/ -v -m "not network"
+	uv run pytest tests/images/ -v -m "not network"
 
 test-images-fast:
-	pytest tests/images/ -v -m "not slow and not network"
+	uv run pytest tests/images/ -v -m "not slow and not network"
 
 test-images-crypto:
-	pytest tests/images/ -v -m crypto
+	uv run pytest tests/images/ -v -m crypto
 
 test-images-auth:
-	pytest tests/images/ -v -m auth
+	uv run pytest tests/images/ -v -m auth
 
 test-images-network:
-	pytest tests/images/ -v -m network
+	uv run pytest tests/images/ -v -m network
 
-# Pass custom image tags from CI (e.g. content-addressed digests):
-#   make test-images-ci PYTEST_ARGS="--version-image solve-it-mcp@sha256:abc"
 test-images-ci:
-	pytest tests/images/ -v -m "not network" $(PYTEST_ARGS)
+	uv run pytest tests/images/ -v -m "not network" $(PYTEST_ARGS)
 
 # ── CI pipeline ────────────────────────────────────────────────────────────────
 ci: test build-all test-images
@@ -70,11 +68,11 @@ ci-images: build-all test-images
 
 # ── Code quality ───────────────────────────────────────────────────────────────
 lint:
-	ruff check src/ tests/
+	uv run ruff check src/ tests/
 
 typecheck:
-	mypy src/mcp_chassis/
+	uv run mypy src/
 
 format:
-	ruff format src/ tests/
-	ruff check --fix src/ tests/
+	uv run ruff format src/ tests/
+	uv run ruff check --fix src/ tests/

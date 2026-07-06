@@ -1,6 +1,6 @@
 version: '3.8'
 
-# Live-data deployment for mcp-chassis (SOLVE-IT MCP Server).
+# Live-data deployment for fss-mcp-solve-it (SOLVE-IT MCP Server).
 # Data is fetched from SOLVE_IT_DATA_URL at container startup.
 # Falls back to the cached copy in the solve-it-cache volume on failure.
 #
@@ -13,7 +13,7 @@ version: '3.8'
 services:
   mcp-chassis-live:
     image: 3soos3/solve-it-mcp-v2:live
-    container_name: mcp-chassis-live
+    container_name: mcp-solve-it-live
 
     build:
       context: .
@@ -81,4 +81,4 @@ volumes:
 networks:
   mcp-network:
     driver: bridge
-    name: mcp-chassis-network
+    name: mcp-solve-it-network

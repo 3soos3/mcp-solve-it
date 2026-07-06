@@ -90,7 +90,7 @@ fi
 # transport and for the image test suite).
 
 if [ "$SOLVE_IT_MODE" = "live" ] && [ "${SOLVE_IT_LIVE_UPDATES:-true}" = "true" ]; then
-    python -m mcp_chassis "$@" &
+    python -m fss_mcp "$@" &
     SERVER_PID=$!
     export SERVER_PID
 
@@ -121,5 +121,5 @@ if [ "$SOLVE_IT_MODE" = "live" ] && [ "${SOLVE_IT_LIVE_UPDATES:-true}" = "true" 
 
     wait $SERVER_PID
 else
-    exec python -m mcp_chassis "$@"
+    exec python -m fss_mcp "$@"
 fi

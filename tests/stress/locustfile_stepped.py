@@ -1,5 +1,5 @@
 """
-Stepped load test for mcp-chassis (SOLVE-IT MCP Server).
+Stepped load test for fss-mcp-solve-it (SOLVE-IT MCP Server).
 
 Ramps users in steps: 10 -> 25 -> 50 -> 75 -> 100 -> 150 -> 200
 Each step runs for 30 seconds before adding more users.

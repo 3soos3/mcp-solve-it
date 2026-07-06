@@ -1,5 +1,5 @@
 """
-Stress test for mcp-chassis HTTP server (SOLVE-IT MCP).
+Stress test for fss-mcp-solve-it HTTP server (SOLVE-IT MCP).
 
 Tests three scenarios:
   1. Health probes  — /healthz and /readyz (no MCP overhead)

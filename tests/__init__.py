@@ -1,1 +1,1 @@
-"""Test suite for mcp-chassis."""
+"""Test suite for fss-mcp-solve-it."""

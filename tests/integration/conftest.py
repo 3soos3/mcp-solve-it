@@ -22,7 +22,7 @@ _RESPONSE_TIMEOUT = 10.0
 class MCPTestClient:
     """Async test client that communicates with an MCP server subprocess over stdio.
 
-    Manages a subprocess running python -m mcp_chassis and exposes
+    Manages a subprocess running python -m fss_mcp and exposes
     send/receive primitives that follow the JSON-RPC protocol.
 
     Args:
@@ -48,7 +48,7 @@ class MCPTestClient:
         self._process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
-            "mcp_chassis",
+            "fss_mcp",
             "--config",
             str(self._config_path),
             "--log-level",

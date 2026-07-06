@@ -1,12 +1,12 @@
 version: '3.8'
 
-# Standard deployment for mcp-chassis (SOLVE-IT MCP Server).
+# Standard deployment for fss-mcp-solve-it (SOLVE-IT MCP Server).
 # Mounts config/ and solve-it-main/ data from the host.
 
 services:
-  mcp-chassis:
+  mcp-solve-it:
     image: 3soos3/mcp-solve-it:latest
-    container_name: mcp-chassis-server
+    container_name: mcp-solve-it
 
     # Build configuration (if building locally instead of pulling from registry)
     build:
@@ -77,4 +77,4 @@ services:
 networks:
   mcp-network:
     driver: bridge
-    name: mcp-chassis-network
+    name: mcp-solve-it-network

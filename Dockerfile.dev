@@ -1,42 +1,38 @@
-# Development Dockerfile for mcp-chassis (SOLVE-IT MCP Server)
-# Includes development tools and installs the package in editable mode for
-# hot-reload. Not optimised for production — use Dockerfile.release instead.
+# Development Dockerfile for fss-mcp-solve-it (SOLVE-IT MCP Server)
+# Includes development tools and installs fss-mcp/fss-core from source for
+# hot-reload. Not optimised for production — use Dockerfile instead.
 
 FROM python:3.11-slim
 
-# Install system dependencies including development tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    curl \
-    ca-certificates \
-    build-essential \
-    vim \
+    git curl ca-certificates build-essential vim \
     && rm -rf /var/lib/apt/lists/*
 
-# Create development user (same UID as production for volume consistency)
 RUN groupadd -r mcpuser -g 1000 && \
     useradd -r -u 1000 -g mcpuser -m -s /bin/bash mcpuser
 
 WORKDIR /app
 
-# Install package in editable mode for hot-reload.
-# Mount the repo root as a volume so code changes take effect without rebuild.
 COPY pyproject.toml README.md ./
 COPY src/ src/
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e ".[dev,otel]"
 
-# Copy config directory (can be overridden by volume mount)
+# Install fss-core and fss-mcp from source, then the project deps.
+# Mount the repo root as a volume so code changes take effect without rebuild.
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+        "fss-core @ git+https://github.com/3soos3/fss-chassis.git#subdirectory=packages/fss-core" \
+        "fss-mcp[http,auth,otel] @ git+https://github.com/3soos3/fss-chassis.git#subdirectory=packages/fss-mcp" \
+        pybtex xlsxwriter "rdflib>=7.0.0" pyyaml "pydantic>=2.0.0" && \
+    pip install --no-cache-dir --no-deps -e .
+
 COPY --chown=mcpuser:mcpuser config/ /app/config/
 
-# Clone SOLVE-IT data (can be overridden by volume mount)
 RUN git clone --depth 1 https://github.com/SOLVE-IT-DF/solve-it.git /app/solve-it-main && \
     rm -rf /app/solve-it-main/.git && \
     chown -R mcpuser:mcpuser /app/solve-it-main
 
 USER mcpuser
 
-# Development environment variables
 ENV PYTHONPATH=/app/src \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -50,5 +46,4 @@ ENV PYTHONPATH=/app/src \
 
 EXPOSE 8000
 
-# Default to stdio for development (easiest with MCP clients)
-ENTRYPOINT ["python", "-m", "mcp_chassis"]
+ENTRYPOINT ["python", "-m", "fss_mcp"]
