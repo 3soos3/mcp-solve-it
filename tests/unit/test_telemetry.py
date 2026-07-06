@@ -51,6 +51,11 @@ def mock_otel(monkeypatch: pytest.MonkeyPatch) -> dict:
         "opentelemetry.exporter.otlp.proto.grpc.metric_exporter": MagicMock(
             OTLPMetricExporter=mock_otlp_metric_exporter_cls
         ),
+        "opentelemetry.propagate": MagicMock(set_global_textmap=MagicMock()),
+        "opentelemetry.trace.propagation": MagicMock(),
+        "opentelemetry.trace.propagation.tracecontext": MagicMock(
+            TraceContextTextMapPropagator=MagicMock()
+        ),
     }
 
     for name, mod in module_map.items():
