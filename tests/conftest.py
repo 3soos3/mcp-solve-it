@@ -1,12 +1,11 @@
-"""Shared test fixtures for mcp_chassis tests."""
+"""Shared test fixtures for fss_mcp_solve_it tests."""
 
 from __future__ import annotations
 
 from typing import Any
 
 import pytest
-
-from mcp_chassis.config import (
+from fss_mcp.config import (
     AuthConfig,
     DiagnosticSettings,
     ExtensionSettings,
@@ -18,7 +17,7 @@ from mcp_chassis.config import (
     ServerSettings,
     ValidationConfig,
 )
-from mcp_chassis.server import ChassisServer
+from fss_mcp.server import ChassisServer
 
 
 def make_test_config(

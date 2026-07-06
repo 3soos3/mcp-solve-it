@@ -9,9 +9,9 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-
 from fss_mcp.config import ServerConfig
 from fss_mcp.context import HandlerContext
+
 from fss_mcp_solve_it.solveit_init import SolveItAppConfig
 
 _SOLVEIT_PATH = str((Path(__file__).resolve().parents[3] / "solve-it-main").resolve())
