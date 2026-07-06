@@ -10,7 +10,7 @@ import pytest
 
 from mcp_chassis.extensions.solveit_init import on_init
 
-_SOLVEIT_PATH = str((Path(__file__).resolve().parents[3] / "solve-it" / "solve-it-main").resolve())
+_SOLVEIT_PATH = str((Path(__file__).resolve().parents[3] / "solve-it-main").resolve())
 
 pytestmark = pytest.mark.skipif(
     not Path(_SOLVEIT_PATH).exists(),

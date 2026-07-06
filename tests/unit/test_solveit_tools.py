@@ -14,7 +14,7 @@ from mcp_chassis.config import ServerConfig
 from mcp_chassis.context import HandlerContext
 from mcp_chassis.extensions.solveit_init import SolveItAppConfig
 
-_SOLVEIT_PATH = str((Path(__file__).resolve().parents[3] / "solve-it" / "solve-it-main").resolve())
+_SOLVEIT_PATH = str((Path(__file__).resolve().parents[3] / "solve-it-main").resolve())
 
 pytestmark = pytest.mark.skipif(
     not Path(_SOLVEIT_PATH).exists(),
