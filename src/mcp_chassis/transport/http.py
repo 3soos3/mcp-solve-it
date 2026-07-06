@@ -23,10 +23,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# FSS investigation context headers (FSS-0002 §4.2–4.3)
-_HEADER_INVESTIGATION_ID = "x-investigation-id"
-_HEADER_ANALYST_IDENTITY = "x-analyst-identity"
-_HEADER_AGENT_IDENTITY = "x-agent-identity"
+# FSS-0010 §3.1: investigation context travels in _meta._fss (JSON-RPC body).
+# Only transport-level headers remain here.
 # Replay prevention header (FSS-0003 §7.3)
 _HEADER_REQUEST_TIMESTAMP = "x-request-timestamp"
 
@@ -198,45 +196,22 @@ class HTTPTransport(TransportBase):
             logger.info("MCP HTTP session manager stopped")
 
         async def _extract_fss_headers(request: Request) -> None:
-            """Extract FSS context headers, set context vars, store in request state.
+            """Extract transport-level FSS headers from Starlette request.
+
+            FSS-0010 §3.1: investigation context now travels in _meta._fss
+            (JSON-RPC body) and is read by server.py via request_ctx.meta.
+            Only the replay-prevention timestamp remains as an HTTP header
+            (FSS-0003 §7.3).
 
             Args:
                 request: The incoming Starlette request.
             """
-            from mcp_chassis.utils.fss_context import (
-                fss_agent_identity,
-                fss_analyst_identity,
-                fss_investigation_id,
-                fss_request_timestamp,
-            )
+            from mcp_chassis.utils.fss_context import fss_request_timestamp
 
-            investigation_id = request.headers.get(_HEADER_INVESTIGATION_ID)
-            analyst_identity = request.headers.get(_HEADER_ANALYST_IDENTITY)
-            agent_identity = request.headers.get(_HEADER_AGENT_IDENTITY)
             request_timestamp = request.headers.get(_HEADER_REQUEST_TIMESTAMP)
-
-            # Set FSS context vars so _dispatch_tool and middleware can read them
-            if investigation_id:
-                fss_investigation_id.set(investigation_id)
-            if analyst_identity:
-                fss_analyst_identity.set(analyst_identity)
-            if agent_identity:
-                fss_agent_identity.set(agent_identity)
             if request_timestamp:
                 fss_request_timestamp.set(request_timestamp)
-
-            request.state.investigation_id = investigation_id
-            request.state.analyst_identity = analyst_identity
-            request.state.agent_identity = agent_identity
             request.state.request_timestamp = request_timestamp
-
-            if investigation_id or analyst_identity or agent_identity:
-                logger.debug(
-                    "FSS headers: investigation_id=%s analyst_identity=%s agent_identity=%s",
-                    investigation_id,
-                    analyst_identity,
-                    agent_identity,
-                )
 
         async def health_check(request: Request) -> JSONResponse:
             """Health check endpoint for Kubernetes liveness probes.
@@ -274,6 +249,100 @@ class HTTPTransport(TransportBase):
                 }
             )
 
+        async def fss_jwks(request: Request) -> JSONResponse:
+            """Serve the FSS JWKS document (FSS-0005 §6.5).
+
+            Lists the active Ed25519 public key(s) with kid, x, and revocation
+            fields. The document is served for the lifetime of the server so
+            signed provenance records remain verifiable after container restart.
+
+            Args:
+                request: The incoming request.
+
+            Returns:
+                JSON response with JWKS document.
+            """
+            try:
+                from mcp_chassis.utils.integrity import build_jwks, load_signing_key
+
+                key = load_signing_key()
+                if key is not None:
+                    return JSONResponse(build_jwks(key))
+            except Exception as exc:
+                logger.debug("JWKS generation failed: %s", exc)
+            # Return empty JWKS when signing is not configured
+            return JSONResponse({"keys": []})
+
+        async def fss_deployment_record(request: Request) -> JSONResponse:
+            """Serve the FSS deployment record (FSS-0009 §4).
+
+            Args:
+                request: The incoming request.
+
+            Returns:
+                JSON response with deployment record.
+            """
+            from datetime import UTC, datetime
+            try:
+                from mcp_chassis.utils.integrity import _compute_key_id, load_signing_key
+                key = load_signing_key()
+            except Exception:
+                key = None
+
+            key_kid = ""
+            key_type = "ephemeral"
+            if key is not None:
+                try:
+                    key_kid = _compute_key_id(key)
+                except Exception:
+                    pass
+                key_path = (
+                    os.environ.get("FSS_SIGNING_KEY_PATH")
+                    or os.environ.get("FSS_SIGNING_KEY_B64")
+                    or os.environ.get("FSS_KEY_DIR")
+                )
+                key_type = "provisioned" if key_path else "ephemeral"
+
+            _conf_level = os.environ.get("FSS_CONFORMANCE_LEVEL", "1")
+            _spec_ver = os.environ.get("FSS_SPEC_VERSION", "1.0")
+            _assessed_under = (
+                os.environ.get("FSS_ASSESSED_UNDER")
+                or f"FSS-0009v{_spec_ver}L{_conf_level}"
+            )
+            _fit_issuers_env = os.environ.get("FSS_FIT_TRUSTED_ISSUERS", "")
+            record: dict = {
+                "fss_schema": "fss-deployment-v1",
+                "server_identity": os.environ.get("FSS_SERVER_IDENTITY", server_name),
+                "server_profile": os.environ.get("FSS_SERVER_PROFILE", "A"),
+                "conformance_level": int(_conf_level),
+                "assessed_under": _assessed_under,
+                "deployment_date": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "deployment_operator": os.environ.get("FSS_DEPLOYMENT_OPERATOR", ""),
+                "server_version": server_version,
+                "tls_termination": "deployment_layer",
+                "tls_minimum_version": "1.3",
+                "authentication_mode": "none",
+                "replay_prevention": "timestamp",
+                "rate_limiting": True,
+                "signing_key_kid": key_kid,
+                "signing_key_type": key_type,
+                "signing_jwks_url": "/.well-known/fss-jwks.json",
+                "image_digest": os.environ.get("IMAGE_DIGEST", ""),
+                "audit_log_location": "none",
+                "audit_log_format": "n/a",
+                "security_log_location": os.environ.get("FSS_SECURITY_LOG", "stderr"),
+                "retention_policy": {
+                    "retention_period": os.environ.get("FSS_RETENTION_PERIOD", "P7Y"),
+                    "retention_basis": os.environ.get("FSS_RETENTION_BASIS", "legal_obligation"),
+                    "post_closure_pseudonymization": (
+                        os.environ.get("FSS_POST_CLOSURE_PSEUDONYMIZATION", "false").lower()
+                        == "true"
+                    ),
+                },
+                "fit_issuers": [i.strip() for i in _fit_issuers_env.split(",") if i.strip()],
+            }
+            return JSONResponse(record)
+
         async def mcp_handler(scope: object, receive: object, send: object) -> None:
             """MCP endpoint — wraps the session manager to extract FSS headers.
 
@@ -282,33 +351,23 @@ class HTTPTransport(TransportBase):
                 receive: ASGI receive callable.
                 send: ASGI send callable.
             """
-            # Extract FSS headers from ASGI scope and set context vars
+            # Extract transport-level headers from ASGI scope.
+            # FSS-0010 §3.1: investigation context is in the JSON-RPC body
+            # (_meta._fss), read by server.py via request_ctx.meta.
             if isinstance(scope, dict):
                 from mcp_chassis.utils.fss_context import (
-                    fss_agent_identity,
-                    fss_analyst_identity,
+                    fss_auth_token,
+                    fss_fit_token,
                     fss_investigation_id,
                     fss_request_timestamp,
                 )
 
                 raw_headers: list[tuple[bytes, bytes]] = scope.get("headers", [])
                 headers_dict = {k.lower(): v.decode("latin-1") for k, v in raw_headers}
-                investigation_id = headers_dict.get(_HEADER_INVESTIGATION_ID)
-                analyst_identity = headers_dict.get(_HEADER_ANALYST_IDENTITY)
-                agent_identity = headers_dict.get(_HEADER_AGENT_IDENTITY)
-                request_timestamp = headers_dict.get(_HEADER_REQUEST_TIMESTAMP)
 
-                if investigation_id:
-                    fss_investigation_id.set(investigation_id)
-                if analyst_identity:
-                    fss_analyst_identity.set(analyst_identity)
-                if agent_identity:
-                    fss_agent_identity.set(agent_identity)
+                request_timestamp = headers_dict.get(_HEADER_REQUEST_TIMESTAMP)
                 if request_timestamp:
                     fss_request_timestamp.set(request_timestamp)
-
-                # Extract bearer token for auth middleware
-                from mcp_chassis.utils.fss_context import fss_auth_token
 
                 auth_header = headers_dict.get("authorization", "")
                 if auth_header:
@@ -316,19 +375,33 @@ class HTTPTransport(TransportBase):
                     token = auth_header[7:].strip() if has_bearer else auth_header.strip()
                     fss_auth_token.set(token)
 
-                if investigation_id or analyst_identity or agent_identity:
-                    logger.debug(
-                        "FSS headers on MCP request: investigation_id=%s "
-                        "analyst_identity=%s agent_identity=%s",
-                        investigation_id,
-                        analyst_identity,
-                        agent_identity,
-                    )
+                fit_token = headers_dict.get("x-fit-token", "")
+                if fit_token:
+                    fss_fit_token.set(fit_token)
+
+                investigation_id = headers_dict.get("x-investigation-id", "")
+                if investigation_id:
+                    fss_investigation_id.set(investigation_id)
+
                 scope.setdefault("state", {})  # type: ignore[union-attr]
-                scope["state"]["investigation_id"] = investigation_id  # type: ignore[index]
-                scope["state"]["analyst_identity"] = analyst_identity  # type: ignore[index]
-                scope["state"]["agent_identity"] = agent_identity  # type: ignore[index]
                 scope["state"]["request_timestamp"] = request_timestamp  # type: ignore[index]
+                scope["state"]["fit_token"] = fit_token  # type: ignore[index]
+                scope["state"]["investigation_id"] = investigation_id  # type: ignore[index]
+
+                # W3C trace context propagation — attach incoming traceparent/tracestate
+                # so spans created during this request become children of the caller's trace.
+                from mcp_chassis.utils.telemetry import get_telemetry
+                _tm = get_telemetry()
+                if _tm.enabled:
+                    from opentelemetry import context as _otel_ctx
+                    from opentelemetry import propagate as _propagate
+                    _ctx = _propagate.extract(headers_dict)
+                    _token = _otel_ctx.attach(_ctx)
+                    try:
+                        await session_manager.handle_request(scope, receive, send)
+                    finally:
+                        _otel_ctx.detach(_token)
+                    return
 
             await session_manager.handle_request(scope, receive, send)
 
@@ -367,6 +440,10 @@ class HTTPTransport(TransportBase):
                 # Kubernetes-style aliases
                 Route("/healthz", health_check, methods=["GET"]),
                 Route("/readyz", readiness_check, methods=["GET"]),
+                # FSS JWKS endpoint for public key discovery (FSS-0005 §6.5)
+                Route("/.well-known/fss-jwks.json", fss_jwks, methods=["GET"]),
+                # FSS deployment record endpoint (FSS-0009 §4)
+                Route("/.well-known/fss-deployment.json", fss_deployment_record, methods=["GET"]),
                 # MCP streamable-HTTP endpoint; the SDK handles GET and POST
                 Mount(self._base_path, app=mcp_handler),
             ],
