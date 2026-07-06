@@ -120,7 +120,9 @@ class RateLimiter:
         """
         self._config = config
         self._global_bucket: _Bucket | None = None
-        self._tool_buckets: dict[str, _Bucket] = {}
+        # Keyed by (session_id, tool_name) so one session cannot deplete
+        # another session's per-tool quota.
+        self._tool_buckets: dict[tuple[str, str], _Bucket] = {}
 
         if config.enabled:
             now = time.monotonic()
@@ -146,19 +148,24 @@ class RateLimiter:
         if not self._config.enabled:
             return RateLimitResult(allowed=True)
 
-        now = time.monotonic()
+        from mcp_chassis.utils.fss_context import fss_session_id as _fss_session_id
 
-        # Ensure per-tool bucket exists
-        if tool_name not in self._tool_buckets:
-            self._tool_buckets[tool_name] = _Bucket(
+        now = time.monotonic()
+        session_id = _fss_session_id.get() or ""
+        bucket_key = (session_id, tool_name)
+
+        # Ensure per-(session, tool) bucket exists
+        if bucket_key not in self._tool_buckets:
+            self._tool_buckets[bucket_key] = _Bucket(
                 tokens=float(self._config.burst_size),
                 last_refill=now,
                 capacity=float(self._config.burst_size),
                 refill_rate=self._config.per_tool_rpm / 60.0,
             )
+            self._evict_stale(now)
 
         global_bucket = self._global_bucket
-        tool_bucket = self._tool_buckets[tool_name]
+        tool_bucket = self._tool_buckets[bucket_key]
 
         if global_bucket is None:
             msg = "Global rate limit bucket is None despite rate limiting being enabled"
@@ -189,6 +196,21 @@ class RateLimiter:
         tool_bucket.consume(now)
         return RateLimitResult(allowed=True)
 
+    def _evict_stale(self, now: float) -> None:
+        """Remove fully-recharged buckets that haven't been used recently.
+
+        A bucket is stale once it has had enough time to reach full capacity
+        since its last access — meaning the session it belonged to is likely
+        gone and holding the entry serves no purpose.
+        """
+        stale = [
+            key for key, b in self._tool_buckets.items()
+            if b.refill_rate > 0
+            and (now - b.last_refill) > (b.capacity / b.refill_rate)
+        ]
+        for key in stale:
+            del self._tool_buckets[key]
+
     def reset(self) -> None:
         """Reset all token buckets to full capacity.
 
@@ -198,9 +220,6 @@ class RateLimiter:
         if self._global_bucket is not None:
             self._global_bucket.tokens = self._global_bucket.capacity
             self._global_bucket.last_refill = now
-        for bucket in self._tool_buckets.values():
-            bucket.tokens = bucket.capacity
-            bucket.last_refill = now
         self._tool_buckets.clear()
 
 

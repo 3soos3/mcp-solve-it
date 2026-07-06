@@ -44,6 +44,7 @@ from mcp_chassis.utils.fss_context import (
     fss_parameters_cai,
     fss_result_cai,
     fss_result_status,
+    fss_session_id,
     fss_transaction_id,
 )
 from mcp_chassis.utils.integrity import compute_json_cai
@@ -849,6 +850,8 @@ class ChassisServer:
             fss_llm_provider.set(None)
             fss_mcp_client.set(None)
             fss_invocation_type.set(None)
+            fss_fit_token.set("")
+            fss_session_id.set(None)
 
         try:
             from mcp_chassis.utils.observer import emit as _obs

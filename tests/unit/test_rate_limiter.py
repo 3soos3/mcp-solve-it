@@ -164,7 +164,8 @@ class TestTokenRefill:
         assert not blocked.allowed
 
         # Simulate time passing by manipulating the bucket directly
-        bucket = limiter._tool_buckets["tool"]
+        # Key is (session_id, tool_name); session_id is "" when no context is set
+        bucket = limiter._tool_buckets[("", "tool")]
         bucket.last_refill -= 1.0  # Pretend 1 second passed
         if limiter._global_bucket:
             limiter._global_bucket.last_refill -= 1.0

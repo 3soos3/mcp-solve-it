@@ -360,6 +360,7 @@ class HTTPTransport(TransportBase):
                     fss_fit_token,
                     fss_investigation_id,
                     fss_request_timestamp,
+                    fss_session_id,
                 )
 
                 raw_headers: list[tuple[bytes, bytes]] = scope.get("headers", [])
@@ -382,6 +383,15 @@ class HTTPTransport(TransportBase):
                 investigation_id = headers_dict.get("x-investigation-id", "")
                 if investigation_id:
                     fss_investigation_id.set(investigation_id)
+
+                session_id = headers_dict.get("mcp-session-id", "")
+                if not session_id:
+                    # Stateless mode: no Mcp-Session-Id issued. Use client
+                    # IP:port as a per-connection discriminator so one client's
+                    # rate-limit bucket does not bleed into another's.
+                    client = scope.get("client") or ("", 0)
+                    session_id = f"{client[0]}:{client[1]}"
+                fss_session_id.set(session_id)
 
                 scope.setdefault("state", {})  # type: ignore[union-attr]
                 scope["state"]["request_timestamp"] = request_timestamp  # type: ignore[index]

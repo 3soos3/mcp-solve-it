@@ -101,6 +101,11 @@ fss_tool_authorization_verified: contextvars.ContextVar[bool] = contextvars.Cont
     "fss_tool_authorization_verified", default=False
 )
 
+# MCP session identifier from Mcp-Session-Id header (FSS-0010 §3.5)
+fss_session_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "fss_session_id", default=None
+)
+
 # Internal: Token list for resetting all vars after each dispatch
 _ALL_VARS: tuple[contextvars.ContextVar[Any], ...] = (
     fss_transaction_id,
@@ -125,6 +130,7 @@ _ALL_VARS: tuple[contextvars.ContextVar[Any], ...] = (
     fss_fit_purpose,
     fss_investigation_id_verified,
     fss_tool_authorization_verified,
+    fss_session_id,
 )
 
 
@@ -163,5 +169,6 @@ __all__ = [
     "fss_result_status",
     "fss_tool_authorization_verified",
     "fss_transaction_id",
+    "fss_session_id",
     "reset_fss_context",
 ]
