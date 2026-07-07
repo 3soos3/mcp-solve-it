@@ -1,317 +1,43 @@
 # SOLVE-IT MCP Server
 
-**Summary**: This project is an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that wraps the  digital forensics knowledge base and its built-in library in order to provision LLMs with programmatic access to SOLVE-IT content. Related repositories include:
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that exposes the [SOLVE-IT](https://github.com/SOLVE-IT-DF/solve-it) digital forensics knowledge base to LLM clients. Built on [fss-mcp](https://github.com/3soos3/fss-chassis) — every tool response carries a cryptographically-linked FSS provenance record.
 
-- **SOLVE-IT**: Provides a structured taxonomy of digital forensic techniques, the weaknesses that affect evidence reliability, and the mitigations that address those weaknesses. This server exposes tools for querying, navigating, and searching that knowledge base. It can be found here: [SOLVE-IT](https://github.com/SOLVE-IT-DF/solve-it)
+SOLVE-IT provides a structured taxonomy of digital forensic techniques (DFT), the weaknesses that affect evidence reliability (DFW), and the mitigations that address those weaknesses (DFM).
 
-- **MCP Server Chassis**: This MCP server was built on the MCP Server Chassis project, which provides an extensible, generic MCP server designed to be easily forked and used for various purposes. It can be found here: [MCP Server Chassis](https://github.com/CKE-Proto/mcp_server-chassis/)
+---
 
 ## Quick Start
 
-### 1. Install dependencies
+Requires [uv](https://docs.astral.sh/uv/) and a local clone of [SOLVE-IT](https://github.com/SOLVE-IT-DF/solve-it).
 
 ```bash
-pip install -e ".[dev]"
+git clone https://github.com/3soos3/mcp-solve-it
+cd mcp-solve-it
+uv sync
 ```
 
-The required dependencies (`mcp`, `jcs`) are declared in `pyproject.toml`. HTTP transport and optional features (auth, OTel) can be installed via extras:
-
-```bash
-pip install -e ".[http]"    # HTTP/SSE transport
-pip install -e ".[auth]"    # OAuth 2.0 / API key auth
-pip install -e ".[otel]"    # OpenTelemetry
-```
-
-### 2. Download this repo.
-
-### 3. Download the main SOLVE-IT repo. 
-
-**Ref**: https://github.com/SOLVE-IT-DF/solve-it
-
-### 4. Configure config/default.toml 
-
-The default.toml file from this repository must point to your downloaded instance of the main SOLVE-IT repository. 
-
-**Example:**
-```
-solveit_data_path = "<full path to your>/solve-it-main"
-```
-
-### 5. Run the MCP server
-
-**Note**: You will not need to run the server manually if your MCP client runs the server when connecting to it, such as with the example in step 6 below.
-
-**Example 1:**
-```
-python3 run.py --config config/default.toml
-```
-
-**Example 2:**
-```
-python -m mcp_chassis
-```
-
-### 6. Configure your MCP client
-
-Configure your MCP client to connect to the MCP server. In some cases (e.g. Claude Desktop), the client will also start the MCP server.
-
-**Example Claude Desktop Config:**
-
-**Example File:** `claude_desktop_config.json` \
-**Example Path (macOS)**: `~/Library/Application Support/Claude/claude_desktop_config.json`):
-
-**Example Config**:
-```json
-{
-  "mcpServers": {
-    "solveit": {
-      "command": "python3",
-      "args": ["/path/to/mcp_server/run.py", "--config", "/path/to/mcp_server/config/default.toml"]
-    }
-  }
-}
-```
-
-
-## Available MCP Tools
-
-24 tools are always registered when the KB loads successfully, plus 3 config-gated full-detail tools and 1 status tool that is always available.
-
-### Orientation (1 tool)
-
-| Tool | Description |
-|---|---|
-| `solveit_get_database_description` | Call this first — returns the DB structure, entity types, available mappings, and item counts |
-
-### Lookup (3 tools)
-
-| Tool | Description |
-|---|---|
-| `solveit_get_technique` | Retrieve full details for a technique by DFT-XXXX ID |
-| `solveit_get_weakness` | Retrieve full details for a weakness by DFW-XXXX ID |
-| `solveit_get_mitigation` | Retrieve full details for a mitigation by DFM-XXXX ID |
-
-### Summary Listing (3 tools)
-
-| Tool | Description |
-|---|---|
-| `solveit_list_techniques` | List all techniques with ID and name |
-| `solveit_list_weaknesses` | List all weaknesses with ID and name |
-| `solveit_list_mitigations` | List all mitigations with ID and name |
-
-### Objectives and Mappings (5 tools)
-
-| Tool | Description |
-|---|---|
-| `solveit_list_objectives` | List all forensic objectives defined in the active mapping |
-| `solveit_get_techniques_for_objective` | List techniques under a given objective |
-| `solveit_get_objectives_for_technique` | Find which objectives a technique belongs to (reverse lookup) |
-| `solveit_list_available_mappings` | List available framework mapping files (solve-it, carrier, dfrws) |
-| `solveit_load_objective_mapping` | Switch to a different investigation framework |
-
-### Relationships (6 tools)
-
-| Tool | Description |
-|---|---|
-| `solveit_get_weaknesses_for_technique` | List weaknesses that affect a given technique |
-| `solveit_get_mitigations_for_weakness` | List mitigations that address a given weakness |
-| `solveit_get_mitigations_for_technique` | List mitigations for a technique in one call (shortcut) |
-| `solveit_get_techniques_for_weakness` | List techniques affected by a given weakness (reverse) |
-| `solveit_get_weaknesses_for_mitigation` | List weaknesses addressed by a given mitigation (reverse) |
-| `solveit_get_techniques_for_mitigation` | List techniques linked to a given mitigation (reverse) |
-
-### Search (1 tool)
-
-| Tool | Description |
-|---|---|
-| `solveit_search` | Full-text search across techniques, weaknesses, and mitigations |
-
-### Citations (3 tools)
-
-| Tool | Description |
-|---|---|
-| `solveit_get_citation` | Resolve a DFCite-XXXX ID to its full bibliographic text |
-| `solveit_list_citations` | List all citation IDs in the knowledge base |
-| `solveit_resolve_inline_citations` | Replace [DFCite-XXXX] markers in text with Harvard-style citations |
-
-### Extension Info (1 tool)
-
-| Tool | Description |
-|---|---|
-| `solveit_list_loaded_extensions` | List any SOLVE-IT-X extension datasets currently loaded |
-
-### Status (1 tool — always available)
-
-| Tool | Description |
-|---|---|
-| `solveit_status` | Report data load status, item counts, and active configuration |
-
-### Full-Detail Listings (disabled by default)
-
-**Note:** These tools return the complete dataset for an entire item type and may consume ~25,000–32,000 LLM context tokens. Enable in **config/default.toml**.
-
-| Tool | Description |
-|---|---|
-| `solveit_list_techniques_full_detail` | List all techniques with complete field data |
-| `solveit_list_weaknesses_full_detail` | List all weaknesses with complete field data |
-| `solveit_list_mitigations_full_detail` | List all mitigations with complete field data |
-
-## Configuration
-
-The `[app]` section in `config/default.toml` controls SOLVE-IT-specific settings. Top-level `[app]` keys can also be overridden by environment variables with the `MCP_APP_` prefix (env vars take precedence over TOML values):
-
-| Environment Variable | Config Key | Type |
-|---|---|---|
-| `MCP_APP_SOLVEIT_DATA_PATH` | `solveit_data_path` | string |
-| `MCP_APP_OBJECTIVE_MAPPING` | `objective_mapping` | string |
-| `MCP_APP_ENABLE_EXTENSIONS` | `enable_extensions` | bool (`true`/`false`/`1`/`0`/`yes`/`no`) |
-| `MCP_APP_INIT_REQUIRED` | `init_required` | bool |
-| `MCP_APP_ENABLE_FULL_DETAIL_TOOLS` | `enable_full_detail_tools` | bool |
+Set the KB path in `config/default.toml`:
 
 ```toml
 [app]
-# Path to the SOLVE-IT repository root (absolute or relative to CWD).
-solveit_data_path = "/<path>/<to>/<your>/solve-it-main"
-
-# Objective mapping file (must exist in the SOLVE-IT data/ directory).
-# Default: "solve-it.json" (the standard SOLVE-IT categorization).
-# Custom mapping files can be placed in the data/ directory to provide
-# alternative categorizations of techniques into objectives.
-# See: https://custom-viewer.solveit-df.org
-objective_mapping = "solve-it.json"
-
-# Whether to load SOLVE-IT-X extension data.
-enable_extensions = true
-
-# If true (default), the server exits immediately when the KB fails to load.
-# If false, the server starts in degraded mode with only solveit_status available.
-init_required = true
-
-# Enable full-detail listing tools (large payloads, disabled by default).
-# WARNING: These tools return the entire dataset for a given type and may
-# consume significant LLM context. You may also need to increase
-# [security.io_limits] max_response_size when enabling this.
-enable_full_detail_tools = false
-
-[app.search]
-# Each flag controls whether the corresponding parameter is exposed
-# in the solveit_search tool's schema. When disabled, the default
-# value is used: item_types=all, substring_match=false, search_logic="AND"
-enable_item_types_filter = true
-enable_substring_match = true
-enable_search_logic = true
+solveit_data_path = "/absolute/path/to/solve-it-main"
 ```
 
-**`solveit_data_path`** — Path to the cloned SOLVE-IT repository. Accepts an absolute path or a path relative to the working directory when the server is started.
-
-**`objective_mapping`** — Filename of the JSON mapping that categorizes techniques into forensic objectives. Must exist inside the SOLVE-IT `data/` directory. The default `solve-it.json` reflects the official categorization.
-
-**`enable_extensions`** — When `true`, the server loads any SOLVE-IT-X extension datasets found in the repository.
-
-**`init_required`** — When `true` (the default), the server exits with a clear error if the knowledge base fails to load. When `false`, the server starts in degraded mode with only `solveit_status` available, which reports the load failure. Set to `false` during development if you need to test server behavior without valid KB data.
-
-**`enable_full_detail_tools`** — Controls whether the three full-detail listing tools are registered. See the section below before enabling.
-
-**Search parameter flags** — The three `[app.search]` flags each control whether the corresponding parameter appears in the `solveit_search` tool schema. When a flag is `false`, the parameter is hidden and its default value is applied silently: `item_types` defaults to all types, `substring_match` defaults to `false` (word-boundary matching), and `search_logic` defaults to `"AND"`.
-
-## Enabling Full-Detail Tools
-
-Set `enable_full_detail_tools = true` in `config/default.toml` to register the three full-detail listing tools.
-
-**Warning:** These tools return the complete dataset for an entire item type in a single response. Depending on the size of the SOLVE-IT data and any loaded extensions, responses can be very large and may consume a significant portion of an LLM's context window. If you enable these tools you will likely also need to raise the response size limit:
-
-```toml
-[security.io_limits]
-max_response_size = 20971520   # 20 MB; default is 5 MB
-```
-
-## Security
-
-Security behavior is inherited from the MCP server chassis on which this MCP server was built. Every tool request passes through the middleware pipeline in this order:
-
-```
-I/O limits → Auth → Rate limit → Sanitize → Validate
-```
-
-Through this pipeline, sanitization attempts can be applied to inputs before they reach tool handlers. The default security profile is `moderate`. 
-
-**IMPORTANT**: These protections are a basic attempt to provide some security by default. If you decide to use this server in a production setting, we recommend you still perform security testing and modify the code of this project to implement security mitigations as appropriate for your threat environment and risk tolerance.
-
-| Profile | Rate Limit | I/O Limits | Sanitization | Error Detail |
-|---|---|---|---|---|
-| `strict` | 60 rpm global, 30 rpm/tool | 1 MB req, 5 MB resp | Full (path traversal, shell metachars, control chars) | Generic |
-| `moderate` | 120 rpm global, 60 rpm/tool | 5 MB req, 20 MB resp | Path traversal + control chars | Detailed |
-| `permissive` | Disabled | 50 MB req/resp | Null bytes only | Detailed |
-
-The active profile is set via `[security] profile` in `config/default.toml`, where the individual settings can be used to override elements of the specified profile. Furthermore, the profile set in default.toml can be overridden with the `MCP_SECURITY_PROFILE` environment variable.
-
-## Testing
+Run (stdio):
 
 ```bash
-python -m pytest tests/              # All tests
-python -m pytest tests/unit/         # Unit tests only
-python -m pytest tests/integration/  # Integration tests only
+python -m fss_mcp --config config/default.toml
 ```
 
-## Project Structure
+---
 
-```
-src/mcp_chassis/
-  server.py                        — ChassisServer: central orchestrator
-  config.py                        — Configuration dataclasses and TOML loading
-  __main__.py                      — CLI entry point
-  extensions/
-    solveit_init.py                — Init hook: loads KB, computes KB version CAI
-    tools/
-      solveit_tools.py             — All 24 SOLVE-IT tool registrations and handlers
-  middleware/
-    pipeline.py                    — Security middleware pipeline (+ replay prevention)
-  security/                        — Auth (none/apikey/oauth), rate limiting, sanitization
-  transport/
-    stdio.py                       — Stdio transport (default)
-    http.py                        — HTTP/SSE transport (optional, requires [http] extra)
-  utils/
-    fss_context.py                 — FSS per-request context variables
-    integrity.py                   — CAI computation, Ed25519 signing (FSS-0005)
-    provenance.py                  — _provenance record builder (FSS-0004)
-    telemetry.py                   — Optional OpenTelemetry integration
-    metrics.py                     — Per-dispatch OTel metrics
-config/
-  default.toml                     — Server and application configuration
-scripts/
-  generate_signing_key.py          — Generate Ed25519 keypair for FSS signing
-  verify_provenance.py             — Verify _provenance records (FSS-0005 §8)
-  validate_dataset.py              — Check KB structural integrity (FSS-0006 §4.4)
-tests/
-  unit/                            — Unit tests
-  integration/                     — Integration tests
-  stress/                          — Locust load tests
-docs/
-  ARCHITECTURE.md                  — Component design and data flow
-  TROUBLESHOOTING.md               — Common issues and fixes
-```
+## MCP Client Configuration
 
-## Using with MCP Clients
-
-The project includes a `run.py` launcher that handles Python path setup automatically. Use absolute paths for both `run.py` and `--config` so the server works regardless of the client's working directory.
-
-**Prerequisites:** Python dependencies must be installed on the machine running the server:
-
-```bash
-cd /path/to/mcp_server
-pip install "mcp>=1.2.0,<2.0" pydantic pybtex   # minimum dependencies
-```
-
-Before configuring a client, set `solveit_data_path` in `config/default.toml` to an absolute path:
-
-```toml
-[app]
-solveit_data_path = "/absolute/path/to/solve-it/solve-it-main"
-```
+Use absolute paths so the server works regardless of the client's working directory.
 
 ### Claude Code
 
-Add to your project's `.mcp.json`:
+Add to `.mcp.json` in your project:
 
 ```json
 {
@@ -319,7 +45,7 @@ Add to your project's `.mcp.json`:
     "solveit": {
       "type": "stdio",
       "command": "python3",
-      "args": ["/path/to/mcp_server/run.py", "--config", "/path/to/mcp_server/config/default.toml"]
+      "args": ["-m", "fss_mcp", "--config", "/path/to/mcp-solve-it/config/default.toml"]
     }
   }
 }
@@ -327,34 +53,216 @@ Add to your project's `.mcp.json`:
 
 ### Claude Desktop
 
-Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`):
+Add to `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "solveit": {
       "command": "python3",
-      "args": ["/path/to/mcp_server/run.py", "--config", "/path/to/mcp_server/config/default.toml"]
+      "args": ["-m", "fss_mcp", "--config", "/path/to/mcp-solve-it/config/default.toml"]
     }
   }
 }
 ```
 
-### Alternative: Using `pip install`
+---
 
-If you prefer not to use `run.py`, install the package and use `-m` directly:
+## Docker
+
+Three image modes are available, controlled by the `SOLVE_IT_MODE` build argument:
+
+| Mode | Data strategy | `FSS_METADATA` default |
+|---|---|---|
+| `release` | Bakes a specific SOLVE-IT release tag; deterministic, citable | `true` |
+| `monthly` | Bakes SHA-pinned HEAD; reproducible within a month | `false` |
+| `live` | No baked data; entrypoint fetches latest at startup and checks daily | `false` |
 
 ```bash
-pip install -e .
+# Live image (no data baked in — pulls at runtime)
+podman build --build-arg SOLVE_IT_MODE=live -t mcp-solve-it:live .
+
+# Run with a local KB volume (bypasses network fetch)
+podman run --rm -it \
+  -e SOLVE_IT_LIVE_UPDATES=false \
+  -e MCP_APP_SOLVEIT_DATA_PATH=/kb \
+  -e MCP_TRANSPORT=stdio \
+  -v /path/to/solve-it-main:/kb:ro \
+  mcp-solve-it:live
 ```
 
-```json
-{
-  "mcpServers": {
-    "solveit": {
-      "command": "python3",
-      "args": ["-m", "mcp_chassis", "--config", "/path/to/mcp_server/config/default.toml"]
-    }
-  }
-}
+Docker Compose files are provided for both standard and live-data deployments.
+
+---
+
+## Available Tools
+
+### Status (always available)
+
+| Tool | Description |
+|---|---|
+| `solveit_status` | KB load status, item counts, and active configuration |
+
+### Orientation
+
+| Tool | Description |
+|---|---|
+| `solveit_get_database_description` | Call first — returns DB structure, entity types, available mappings, and item counts |
+
+### Lookup
+
+| Tool | Description |
+|---|---|
+| `solveit_get_technique` | Full details for a technique by DFT-XXXX ID |
+| `solveit_get_weakness` | Full details for a weakness by DFW-XXXX ID |
+| `solveit_get_mitigation` | Full details for a mitigation by DFM-XXXX ID |
+
+### Summary Listings
+
+| Tool | Description |
+|---|---|
+| `solveit_list_techniques` | All techniques with ID and name |
+| `solveit_list_weaknesses` | All weaknesses with ID and name |
+| `solveit_list_mitigations` | All mitigations with ID and name |
+
+### Objectives and Mappings
+
+| Tool | Description |
+|---|---|
+| `solveit_list_objectives` | All forensic objectives in the active mapping |
+| `solveit_get_techniques_for_objective` | Techniques under a given objective |
+| `solveit_get_objectives_for_technique` | Objectives a technique belongs to (reverse) |
+| `solveit_list_available_mappings` | Available framework mapping files |
+| `solveit_load_objective_mapping` | Switch to a different investigation framework |
+
+### Relationships
+
+| Tool | Description |
+|---|---|
+| `solveit_get_weaknesses_for_technique` | Weaknesses that affect a technique |
+| `solveit_get_mitigations_for_weakness` | Mitigations that address a weakness |
+| `solveit_get_mitigations_for_technique` | Mitigations for a technique (shortcut) |
+| `solveit_get_techniques_for_weakness` | Techniques affected by a weakness (reverse) |
+| `solveit_get_weaknesses_for_mitigation` | Weaknesses addressed by a mitigation (reverse) |
+| `solveit_get_techniques_for_mitigation` | Techniques linked to a mitigation (reverse) |
+
+### Search
+
+| Tool | Description |
+|---|---|
+| `solveit_search` | Full-text search across techniques, weaknesses, and mitigations |
+
+### Citations
+
+| Tool | Description |
+|---|---|
+| `solveit_get_citation` | Resolve a DFCite-XXXX ID to full bibliographic text |
+| `solveit_list_citations` | All citation IDs in the knowledge base |
+| `solveit_resolve_inline_citations` | Replace [DFCite-XXXX] markers with Harvard-style citations |
+
+### Extension Info
+
+| Tool | Description |
+|---|---|
+| `solveit_list_loaded_extensions` | SOLVE-IT-X extension datasets currently loaded |
+
+### Full-Detail Listings (disabled by default)
+
+These return the complete dataset for an entire item type (~25,000–32,000 tokens). Enable in `config/default.toml` and raise `max_response_size` accordingly.
+
+| Tool | Description |
+|---|---|
+| `solveit_list_techniques_full_detail` | All techniques with complete field data |
+| `solveit_list_weaknesses_full_detail` | All weaknesses with complete field data |
+| `solveit_list_mitigations_full_detail` | All mitigations with complete field data |
+
+---
+
+## Configuration
+
+### SOLVE-IT data path (required)
+
+```toml
+[app]
+solveit_data_path = "/absolute/path/to/solve-it-main"
+```
+
+Can be overridden at runtime with `MCP_APP_SOLVEIT_DATA_PATH`.
+
+### Key app settings
+
+| Key | Default | Description |
+|---|---|---|
+| `objective_mapping` | `"solve-it.json"` | Mapping file inside the SOLVE-IT `data/` directory |
+| `enable_extensions` | `true` | Load SOLVE-IT-X extension datasets |
+| `init_required` | `true` | Exit on KB load failure (set `false` for degraded dev mode) |
+| `enable_full_detail_tools` | `false` | Register the three full-detail listing tools |
+
+Environment variable overrides use the `MCP_APP_` prefix (e.g. `MCP_APP_SOLVEIT_DATA_PATH`).
+
+### Security profile
+
+```toml
+[security]
+profile = "moderate"   # strict | moderate | permissive
+```
+
+| Profile | Rate limit | I/O limits | Sanitisation |
+|---|---|---|---|
+| `strict` | 60 rpm global / 30 rpm per tool | 1 MB req / 5 MB resp | Path traversal, shell metacharacters, control chars |
+| `moderate` | 120 rpm global / 60 rpm per tool | 5 MB req / 20 MB resp | Path traversal, control chars |
+| `permissive` | Disabled | 50 MB req/resp | Null bytes only |
+
+---
+
+## FSS Provenance
+
+Every tool response includes a `_provenance` block containing:
+
+- `transaction_id` — UUID v4 for this call
+- `tool_version`, `server_version` — package versions (`fss-mcp-solve-it`)
+- `kb_version_id` — SHA-256 CAI of the active SOLVE-IT snapshot
+- `parameters_cai`, `result_cai` — content-addressed digests of inputs and output
+- `assessed_under` — FSS conformance identifier (e.g. `FSS-0010v0.3@FSS-0009v0.3L1`)
+
+Set `FSS_LEVEL=2` or `FSS_LEVEL=3` to claim a higher conformance level after completing a self-assessment against [FSS-0009](https://github.com/3soos3/fss-chassis). At L2+, responses are signed with Ed25519. The default is L1.
+
+---
+
+## Development
+
+```bash
+uv sync --extra dev
+uv run pytest tests/unit/          # unit tests
+uv run pytest tests/integration/   # integration tests (requires KB)
+uv run ruff check src/ tests/
+uv run mypy src/
+```
+
+Utility scripts in `scripts/`:
+
+| Script | Purpose |
+|---|---|
+| `verify_provenance.py` | Verify a `_provenance` record from a tool response (FSS-0005 §8) |
+| `validate_dataset.py` | Check KB structural integrity (FSS-0006 §4.4) |
+
+---
+
+## Project Structure
+
+```
+src/fss_mcp_solve_it/
+  __init__.py              — package version
+  solveit_init.py          — init hook: loads KB, computes KB version CAI, stamps server version
+  tools/
+    solveit_tools.py       — all tool registrations and handlers
+config/
+  default.toml             — server and application configuration
+scripts/
+  verify_provenance.py     — provenance record verifier
+  validate_dataset.py      — KB structural integrity checker
+tests/
+  unit/                    — unit tests
+  integration/             — integration tests (require live KB)
+  stress/                  — Locust load tests
 ```
