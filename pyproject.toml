@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fss-mcp-solve-it"
-version = "1.2.0"
+version = "1.2.1"
 description = "FSS-compliant MCP server for the SOLVE-IT digital forensics knowledge base"
 requires-python = ">=3.11"
 dependencies = [
