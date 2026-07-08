@@ -30,32 +30,33 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /build
 COPY pyproject.toml README.md ./
 
-# Install fss-core and fss-mcp from source (replaced by PyPI versions once published).
-# The solve-it runtime deps (pybtex etc.) are declared in pyproject.toml [dependencies]
-# but pip ignores [tool.uv.sources], so we install everything explicitly here.
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir \
-        "fss-core @ git+https://github.com/3soos3/fss-chassis.git#subdirectory=packages/fss-core" \
-        "fss-mcp[http,auth,otel] @ git+https://github.com/3soos3/fss-chassis.git#subdirectory=packages/fss-mcp" \
+# vendor/ holds locally-built fss-core and fss-mcp wheels for pre-PyPI builds.
+# Once both packages are published, remove this COPY and the --find-links flag below.
+COPY vendor/ /build/vendor/
+
+# Install fss-core and fss-mcp. --find-links checks vendor/ first; falls back to
+# PyPI once packages are published there. pip ignores [tool.uv.sources] so we
+# list the solve-it runtime deps explicitly rather than relying on pyproject.toml.
+RUN pip install --find-links /build/vendor/ \
+        "fss-core[auth]" \
+        "fss-mcp[http,auth,otel]" \
         pybtex xlsxwriter "rdflib>=7.0.0" pyyaml "pydantic>=2.0.0"
 
-# Clone SOLVE-IT data while git and pip are still available.
-# SHA checkout: reproducible (monthly/latest). Tag checkout: pinned release.
-# Live mode: no bundled data — entrypoint fetches or uses a mounted volume.
-# The solveit runtime deps (pybtex, rdflib, etc.) are already installed above
-# via .[solveit]; no secondary pip install needed from requirements.txt.
-RUN git clone --depth=1 https://github.com/SOLVE-IT-DF/solve-it.git /tmp/solve-it-main && \
-    if [ "$SOLVE_IT_MODE" != "live" ]; then \
+# Clone SOLVE-IT data for release/monthly modes. Live mode skips the clone —
+# the entrypoint fetches fresh data at startup from SOLVE_IT_LIVE_REPO instead.
+RUN if [ "$SOLVE_IT_MODE" = "live" ]; then \
+      mkdir -p /tmp/solve-it-main; \
+    else \
+      git clone --depth=1 https://github.com/SOLVE-IT-DF/solve-it.git /tmp/solve-it-main && \
       if [ -n "$SOLVEIT_SHA" ]; then \
         git -C /tmp/solve-it-main fetch --depth=1 origin "$SOLVEIT_SHA" && \
         git -C /tmp/solve-it-main checkout "$SOLVEIT_SHA"; \
       elif [ -n "$SOLVE_IT_VERSION" ] && [ "$SOLVE_IT_VERSION" != "main" ]; then \
         git -C /tmp/solve-it-main fetch --depth=1 origin "refs/tags/$SOLVE_IT_VERSION" && \
         git -C /tmp/solve-it-main checkout "$SOLVE_IT_VERSION"; \
-      fi; \
-    fi && \
-    rm -rf /tmp/solve-it-main/.git
+      fi && \
+      rm -rf /tmp/solve-it-main/.git; \
+    fi
 
 # Remove pip/setuptools/wheel and clean up after all installs are done.
 RUN pip uninstall -y pip setuptools wheel 2>/dev/null || true && \
