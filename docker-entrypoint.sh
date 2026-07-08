@@ -10,10 +10,15 @@
 #                                  it with the fresh data.
 #                                  Set SOLVE_IT_LIVE_UPDATES=false to disable all
 #                                  update checks and use cached/bundled data only.
+#
+# All entrypoint/updater log lines go to stderr so stdout remains a clean
+# JSON-RPC stream when using stdio transport.
 
 set -e
 
 # ── helpers ────────────────────────────────────────────────────────────────────
+
+_log() { printf '%s\n' "$*" >&2; }
 
 # Resolve latest commit SHA from GitHub API. Prints SHA or nothing on failure.
 _latest_sha() {
@@ -51,24 +56,24 @@ if [ "$SOLVE_IT_MODE" = "live" ]; then
 
     # Startup check
     if [ "${SOLVE_IT_LIVE_UPDATES:-true}" = "true" ]; then
-        echo "[entrypoint] live mode — checking ${REPO}@${BRANCH} ..."
+        _log "[entrypoint] live mode — checking ${REPO}@${BRANCH} ..."
         LATEST_SHA=$(_latest_sha)
         STORED_SHA=""; [ -f "$SHA_FILE" ] && STORED_SHA=$(cat "$SHA_FILE")
         SHORT=$(printf '%s' "$LATEST_SHA" | cut -c1-7)
 
         if [ -n "$LATEST_SHA" ] && [ "$LATEST_SHA" = "$STORED_SHA" ] \
            && [ -d "${DATA_DIR}/data" ]; then
-            echo "[entrypoint] Already up to date (${SHORT})."
+            _log "[entrypoint] Already up to date (${SHORT})."
         elif [ -n "$LATEST_SHA" ]; then
-            echo "[entrypoint] New commit ${SHORT} — downloading ..."
+            _log "[entrypoint] New commit ${SHORT} — downloading ..."
             _download "$LATEST_SHA" \
-                && echo "[entrypoint] Data updated." \
-                || echo "[entrypoint] Download failed — will use fallback." >&2
+                && _log "[entrypoint] Data updated." \
+                || _log "[entrypoint] Download failed — will use fallback."
         else
-            echo "[entrypoint] Cannot reach GitHub API — using cached/bundled data." >&2
+            _log "[entrypoint] Cannot reach GitHub API — using cached/bundled data."
         fi
     else
-        echo "[entrypoint] live mode — updates disabled."
+        _log "[entrypoint] live mode — updates disabled."
     fi
 
     # Resolve active data path and stamp SOLVE_IT_VERSION for provenance
@@ -76,10 +81,10 @@ if [ "$SOLVE_IT_MODE" = "live" ]; then
         export MCP_APP_SOLVEIT_DATA_PATH="${DATA_DIR}"
         ACTIVE_SHA=""; [ -f "$SHA_FILE" ] && ACTIVE_SHA=$(cat "$SHA_FILE")
         [ -n "$ACTIVE_SHA" ] && export SOLVE_IT_VERSION="sha-$(printf '%s' "$ACTIVE_SHA" | cut -c1-7)"
-        echo "[entrypoint] Using live data (${SOLVE_IT_VERSION:-unknown})."
+        _log "[entrypoint] Using live data (${SOLVE_IT_VERSION:-unknown})."
     else
         export MCP_APP_SOLVEIT_DATA_PATH="${BUNDLED_DIR}"
-        echo "[entrypoint] Falling back to bundled data (${SOLVE_IT_VERSION:-unknown})."
+        _log "[entrypoint] Falling back to bundled data (${SOLVE_IT_VERSION:-unknown})."
     fi
 fi
 
@@ -100,21 +105,21 @@ if [ "$SOLVE_IT_MODE" = "live" ] && [ "${SOLVE_IT_LIVE_UPDATES:-true}" = "true" 
     (
         while true; do
             sleep 86400
-            echo "[updater] Daily check — ${REPO}@${BRANCH} ..."
+            _log "[updater] Daily check — ${REPO}@${BRANCH} ..."
             LATEST=$(_latest_sha)
             STORED=""; [ -f "$SHA_FILE" ] && STORED=$(cat "$SHA_FILE")
 
             if [ -n "$LATEST" ] && [ "$LATEST" != "$STORED" ]; then
                 SHORT=$(printf '%s' "$LATEST" | cut -c1-7)
-                echo "[updater] New commit ${SHORT} — downloading ..."
+                _log "[updater] New commit ${SHORT} — downloading ..."
                 if _download "$LATEST"; then
-                    echo "[updater] Restarting server to load new data ..."
+                    _log "[updater] Restarting server to load new data ..."
                     kill -TERM "$SERVER_PID" 2>/dev/null || true
                 else
-                    echo "[updater] Download failed — keeping current data." >&2
+                    _log "[updater] Download failed — keeping current data."
                 fi
             else
-                echo "[updater] No changes."
+                _log "[updater] No changes."
             fi
         done
     ) &
