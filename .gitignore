@@ -29,3 +29,4 @@ venv/
 
 # Items
 TODO*.txt
+vendor/
