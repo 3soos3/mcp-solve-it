@@ -30,14 +30,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /build
 COPY pyproject.toml README.md ./
 
-# vendor/ holds locally-built fss-core and fss-mcp wheels for pre-PyPI builds.
-# Once both packages are published, remove this COPY and the --find-links flag below.
-COPY vendor/ /build/vendor/
-
-# Install fss-core and fss-mcp. --find-links checks vendor/ first; falls back to
-# PyPI once packages are published there. pip ignores [tool.uv.sources] so we
-# list the solve-it runtime deps explicitly rather than relying on pyproject.toml.
-RUN pip install --find-links /build/vendor/ \
+RUN pip install \
         "fss-core[auth]" \
         "fss-mcp[http,auth,otel]" \
         pybtex xlsxwriter "rdflib>=7.0.0" pyyaml "pydantic>=2.0.0"
