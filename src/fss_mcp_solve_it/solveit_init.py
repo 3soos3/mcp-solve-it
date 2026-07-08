@@ -154,6 +154,9 @@ def on_init(server: ChassisServer) -> None:
     Args:
         server: The ChassisServer instance.
     """
+    import fss_mcp_solve_it
+    server._server_version = fss_mcp_solve_it.__version__
+
     raw_config = server._config.app
     _apply_env_overrides(raw_config)
     config = SolveItAppConfig.from_raw(raw_config)

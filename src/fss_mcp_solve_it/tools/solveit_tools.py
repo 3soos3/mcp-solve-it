@@ -12,6 +12,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
+import fss_mcp_solve_it
 from fss_mcp.extensions.batch import register_simple_tools
 
 if TYPE_CHECKING:
@@ -168,7 +169,6 @@ _BATCH_TOOLS: list[dict[str, Any]] = [
         "param_description": "The technique ID (e.g. DFT-1001).",
         "param_schema": {"type": "string", "minLength": 1},
         "not_found_check": True,
-        "tool_version": "1.0.0",
         "idempotent": True,
         "side_effects": False,
         "deterministic": True,
@@ -968,6 +968,8 @@ def register(server: ChassisServer) -> None:
         server: The ChassisServer instance with ``_kb`` and ``_kb_error``
             attributes set by the init hook.
     """
+    _version = fss_mcp_solve_it.__version__
+    _before = set(server._tools)
     _register_status_tool(server)
 
     kb = getattr(server, "_kb", None)
@@ -981,7 +983,7 @@ def register(server: ChassisServer) -> None:
     _register_database_description_tool(server, kb)
 
     # Batch-registered tools: detail lookups + concise lists + objectives (8)
-    register_simple_tools(server, kb, _BATCH_TOOLS)
+    register_simple_tools(server, kb, _BATCH_TOOLS, default_tool_version=fss_mcp_solve_it.__version__)
 
     # Relationship tools: forward and reverse (5)
     _register_relationship_tools(server, kb)
@@ -1009,3 +1011,8 @@ def register(server: ChassisServer) -> None:
 
     # Citation tools: get, list, resolve inline (3)
     _register_citation_tools(server, kb)
+
+    # Stamp all tools registered by this module with the package version
+    for name, info in server._tools.items():
+        if name not in _before:
+            info["tool_version"] = _version
