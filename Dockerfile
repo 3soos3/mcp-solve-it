@@ -31,8 +31,8 @@ WORKDIR /build
 COPY pyproject.toml README.md ./
 
 RUN pip install \
-        "fss-core[auth]" \
-        "fss-mcp[http,auth,otel]" \
+        "fss-core[auth]==0.3.3" \
+        "fss-mcp[http,auth,otel]==0.3.3" \
         pybtex xlsxwriter "rdflib>=7.0.0" pyyaml "pydantic>=2.0.0"
 
 # Clone SOLVE-IT data for release/monthly modes. Live mode skips the clone —

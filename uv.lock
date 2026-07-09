@@ -494,7 +494,7 @@ wheels = [
 
 [[package]]
 name = "fss-core"
-version = "0.3.2"
+version = "0.3.3"
 source = { editable = "../fss-chassis/packages/fss-core" }
 dependencies = [
     { name = "jcs" },
@@ -511,7 +511,7 @@ provides-extras = ["auth"]
 
 [[package]]
 name = "fss-mcp"
-version = "0.3.2"
+version = "0.3.3"
 source = { editable = "../fss-chassis/packages/fss-mcp" }
 dependencies = [
     { name = "fss-core" },
@@ -553,7 +553,7 @@ provides-extras = ["http", "auth", "otel"]
 
 [[package]]
 name = "fss-mcp-solve-it"
-version = "1.2.0"
+version = "1.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "fss-mcp", extra = ["auth", "http", "otel"] },
