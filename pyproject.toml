@@ -8,7 +8,7 @@ version = "1.1.0"
 description = "FSS-compliant MCP server for the SOLVE-IT digital forensics knowledge base"
 requires-python = ">=3.11"
 dependencies = [
-    "mcp>=1.2.0,<2.0",
+    "mcp>=1.2.0,<3.0",
     "jcs>=0.2.0",
 ]
 
